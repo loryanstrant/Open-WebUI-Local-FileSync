@@ -14,6 +14,14 @@ A Docker container that periodically synchronizes files from a local mount with 
 - 🔁 **NEW:** Automatic retry logic with configurable attempts and delays
 - ✅ **NEW:** Upload processing verification with status tracking
 
+## Documentation
+
+- 📖 [Quick Start Guide](QUICKSTART.md) - Get started with knowledge bases and retry logic
+- 📚 [Examples](EXAMPLES.md) - Comprehensive examples for various deployment scenarios
+- 📋 [State File Format](STATE_FORMAT.md) - Advanced state file documentation
+- 🔄 [Flow Diagrams](FLOW_DIAGRAM.md) - Visual workflow documentation
+- 🛠️ [Implementation Details](IMPLEMENTATION.md) - Technical implementation summary
+
 ## Quick Start
 
 > 💡 **For more detailed examples**, see [EXAMPLES.md](EXAMPLES.md) which includes complete docker-compose configurations for various use cases.
