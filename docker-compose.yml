@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  filesync:
+    build: .
+    # For production, use the GHCR image:
+    # image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: openwebui-filesync
+    environment:
+      # Open WebUI Configuration
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: your_api_key_here
+      
+      # Sync Schedule Configuration
+      TZ: UTC                    # Timezone (e.g., America/New_York, Europe/London)
+      SYNC_SCHEDULE: daily       # Options: hourly, daily, weekly
+      SYNC_TIME: "00:00"         # Time of day to run (HH:MM format)
+      SYNC_DAY: "0"              # Day of week for weekly sync (0=Sunday, 1=Monday, etc. or mon,tue,wed,...)
+      
+      # File Configuration
+      FILES_DIR: /data
+      ALLOWED_EXTENSIONS: .md,.txt,.pdf,.doc,.docx
+      STATE_FILE: /app/sync_state.json
+    volumes:
+      # Mount your local directory containing files to sync
+      - ./files:/data:ro
+      # Optional: Persist state between container restarts
+      - ./state:/app/state
+    restart: unless-stopped
