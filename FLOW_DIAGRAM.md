@@ -83,6 +83,12 @@ This document illustrates the enhanced sync flow with knowledge base mapping and
    │  │  │  └─ Timeout reached → FAILURE
    │  │  └─ Return success/failure
    │  │
+   │  ├─ ADD TO KNOWLEDGE BASE (if kb_id present):
+   │  │  ├─ POST /api/v1/knowledge/{kb_id}/file/add
+   │  │  ├─ Body: {file_id: <file_id>}
+   │  │  ├─ If SUCCESS → Continue
+   │  │  └─ If FAILURE → Mark as failed, will retry
+   │  │
    │  └─ UPDATE STATE:
    │     ├─ If SUCCESS:
    │     │  ├─ status = 'uploaded'
@@ -178,6 +184,10 @@ Step 3: Get or Create KB
 Step 4: Upload File
         POST /api/v1/files/
         Body: {file: <binary>, knowledge_base_id: "kb-123"}
+
+Step 5: Add File to Knowledge Base Collection
+        POST /api/v1/knowledge/{kb_id}/file/add
+        Body: {file_id: "file-uuid"}
 ```
 
 ## Error Handling
