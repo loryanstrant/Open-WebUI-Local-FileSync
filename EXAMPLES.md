@@ -129,9 +129,9 @@ services:
     restart: unless-stopped
 ```
 
-## Example 5: Complete Stack with Open WebUI
+## Example 5: Complete Stack with Open WebUI and Knowledge Bases
 
-Running both Open WebUI and the file sync container together:
+Running both Open WebUI and the file sync container together with organized knowledge bases:
 
 ```yaml
 version: '3.8'
@@ -166,14 +166,28 @@ services:
       TZ: UTC
       SYNC_SCHEDULE: daily
       SYNC_TIME: "03:00"
+      # Organize files into separate knowledge bases
+      KNOWLEDGE_BASE_MAPPING: "technical:Technical_Docs,product:Product_Info,support:Support_KB"
+      # Configure retry behavior
+      MAX_RETRY_ATTEMPTS: 5
+      RETRY_DELAY: 120
+      UPLOAD_TIMEOUT: 600
     volumes:
-      - ./knowledge-base:/data:ro
+      - ./documentation/technical:/data/technical:ro
+      - ./documentation/product:/data/product:ro
+      - ./documentation/support:/data/support:ro
     restart: unless-stopped
 
 volumes:
   openwebui-data:
   ollama-data:
 ```
+
+This setup:
+- Runs Open WebUI with Ollama backend
+- Syncs files from three different directories to three knowledge bases
+- Configures robust retry logic (5 attempts, 2-minute delays)
+- Allows 10 minutes for file processing
 
 ## Example 6: Using Docker CLI
 

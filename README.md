@@ -10,6 +10,9 @@ A Docker container that periodically synchronizes files from a local mount with 
 - 📁 Multiple file format support (markdown, text, PDF, Word docs)
 - 🔍 Smart sync: only uploads changed files
 - 🐳 Easy deployment with Docker
+- 📚 **NEW:** Knowledge base organization with directory mapping
+- 🔁 **NEW:** Automatic retry logic with configurable attempts and delays
+- ✅ **NEW:** Upload processing verification with status tracking
 
 ## Quick Start
 
@@ -229,6 +232,29 @@ The sync script implements robust error handling:
 ## Volumes
 
 - `/data` - Mount your local directory containing files to sync (read-only recommended)
+
+## Migrating from Previous Versions
+
+If you're upgrading from a version before the knowledge base and retry logic features, your existing state file will be automatically migrated. However, be aware:
+
+- **Old state format**: Previously, state was a simple `{file_path: hash}` mapping
+- **New state format**: State now includes detailed tracking: `{files: {...}, knowledge_bases: {...}}`
+- **Automatic migration**: On first run, files with the old format will be automatically detected and work correctly
+- **State file location**: If you're mounting a custom state file path, ensure it persists across container restarts
+
+To manually reset the state file (force re-upload of all files):
+
+```bash
+# Stop the container
+docker stop openwebui-filesync
+
+# Remove the state file (if mounted externally)
+rm ./state/sync_state.json
+
+# Or, if using default internal state, recreate the container
+docker rm openwebui-filesync
+docker-compose up -d
+```
 
 ## Building Locally
 

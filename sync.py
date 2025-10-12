@@ -88,9 +88,39 @@ def load_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, 'r') as f:
-                return json.load(f)
+                state = json.load(f)
+                
+                # Check if this is the old format (flat dict with file_path: hash)
+                # Old format: {"path/to/file.txt": "hash123", ...}
+                # New format: {"files": {...}, "knowledge_bases": {...}}
+                if 'files' not in state and 'knowledge_bases' not in state:
+                    # Migrate old format to new format
+                    log("Migrating old state format to new format...")
+                    old_state = state.copy()
+                    state = {
+                        'files': {},
+                        'knowledge_bases': {}
+                    }
+                    # Convert old entries to new format
+                    for file_key, file_hash in old_state.items():
+                        if isinstance(file_hash, str):  # Ensure it's a simple hash string
+                            state['files'][file_key] = {
+                                'hash': file_hash,
+                                'status': 'uploaded',
+                                'retry_count': 0
+                            }
+                    log(f"Migrated {len(state['files'])} file entries")
+                
+                # Ensure both keys exist
+                if 'files' not in state:
+                    state['files'] = {}
+                if 'knowledge_bases' not in state:
+                    state['knowledge_bases'] = {}
+                
+                return state
         except Exception as e:
             log(f"Error loading state file: {e}")
+    
     return {
         'files': {},  # file_key -> {hash, status, last_attempt, retry_count, knowledge_base}
         'knowledge_bases': {}  # kb_name -> {id, created_at}
