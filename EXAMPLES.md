@@ -25,6 +25,41 @@ services:
     restart: unless-stopped
 ```
 
+## Example 1a: Knowledge Base Organization
+
+Sync files into organized knowledge bases based on directory structure:
+
+```yaml
+version: '3.8'
+
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: openwebui-filesync
+    environment:
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: sk-your-api-key-here
+      TZ: America/New_York
+      SYNC_SCHEDULE: daily
+      SYNC_TIME: "02:00"
+      KNOWLEDGE_BASE_MAPPING: "product-docs:Product_Documentation,internal-wiki:Internal_Wiki,customer-guides:Customer_Guides"
+      ALLOWED_EXTENSIONS: .md,.txt,.pdf
+      MAX_RETRY_ATTEMPTS: 5
+      RETRY_DELAY: 120
+    volumes:
+      - ./documentation/product-docs:/data/product-docs:ro
+      - ./documentation/internal-wiki:/data/internal-wiki:ro
+      - ./documentation/customer-guides:/data/customer-guides:ro
+    restart: unless-stopped
+```
+
+This configuration:
+- Maps three different directories to three knowledge bases
+- Product documentation goes to "Product_Documentation" KB
+- Internal wiki goes to "Internal_Wiki" KB
+- Customer guides go to "Customer_Guides" KB
+- Retries failed uploads up to 5 times with 2-minute delays
+
 ## Example 2: Hourly Sync with Multiple File Types
 
 Sync every hour at 15 minutes past the hour:
