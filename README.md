@@ -233,6 +233,11 @@ The sync script implements robust error handling:
 
 - `/data` - Mount your local directory containing files to sync (read-only recommended)
 
+## Advanced Documentation
+
+- [State File Format](STATE_FORMAT.md) - Detailed documentation on the sync state file structure and manual manipulation
+- [Examples](EXAMPLES.md) - Comprehensive examples for various deployment scenarios
+
 ## Migrating from Previous Versions
 
 If you're upgrading from a version before the knowledge base and retry logic features, your existing state file will be automatically migrated. However, be aware:
