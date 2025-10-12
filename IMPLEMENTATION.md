@@ -130,6 +130,7 @@ The implementation assumes the OpenWebUI API supports:
 1. **Knowledge Base Management:**
    - `GET /api/v1/knowledge/` - List knowledge bases
    - `POST /api/v1/knowledge/` - Create knowledge base
+   - `POST /api/v1/knowledge/{id}/file/add` - Add uploaded file to knowledge base collection
 
 2. **File Upload:**
    - `POST /api/v1/files/` - Upload file (with optional `knowledge_base_id`)

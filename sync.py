@@ -274,6 +274,42 @@ def upload_file_to_openwebui(filepath, file_hash, kb_id=None):
         log(f"✗ Error uploading {filepath.name}: {e}")
         return False, None
 
+def add_file_to_knowledge_base(kb_id, file_id):
+    """Add an uploaded file to a knowledge base collection
+    
+    Args:
+        kb_id: Knowledge base ID
+        file_id: ID of the uploaded file
+    
+    Returns:
+        True if successfully added, False otherwise
+    """
+    if not kb_id or not file_id:
+        return False
+    
+    url = f"{OPENWEBUI_URL.rstrip('/')}/api/v1/knowledge/{kb_id}/file/add"
+    headers = {
+        'Authorization': f'Bearer {OPENWEBUI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    
+    data = {
+        'file_id': file_id
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        
+        if response.status_code in [200, 201]:
+            log(f"✓ Added file {file_id} to knowledge base {kb_id}")
+            return True
+        else:
+            log(f"✗ Failed to add file {file_id} to knowledge base {kb_id}: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        log(f"✗ Error adding file {file_id} to knowledge base {kb_id}: {e}")
+        return False
+
 def check_upload_status(file_id):
     """Check if an uploaded file has been processed successfully
     
@@ -446,15 +482,33 @@ def sync_files():
                 processing_success = wait_for_upload_processing(file_id)
                 
                 if processing_success:
-                    state['files'][file_key] = {
-                        'hash': file_hash,
-                        'status': 'uploaded',
-                        'file_id': file_id,
-                        'last_attempt': datetime.now().isoformat(),
-                        'retry_count': 0,
-                        'knowledge_base': kb_name
-                    }
-                    uploaded += 1
+                    # Add file to knowledge base collection if kb_id is present
+                    kb_add_success = True
+                    if kb_id:
+                        kb_add_success = add_file_to_knowledge_base(kb_id, file_id)
+                    
+                    if kb_add_success:
+                        state['files'][file_key] = {
+                            'hash': file_hash,
+                            'status': 'uploaded',
+                            'file_id': file_id,
+                            'last_attempt': datetime.now().isoformat(),
+                            'retry_count': 0,
+                            'knowledge_base': kb_name
+                        }
+                        uploaded += 1
+                    else:
+                        # Failed to add to knowledge base
+                        state['files'][file_key] = {
+                            'hash': file_hash,
+                            'status': 'failed',
+                            'file_id': file_id,
+                            'last_attempt': datetime.now().isoformat(),
+                            'retry_count': file_state.get('retry_count', 0) + 1,
+                            'knowledge_base': kb_name,
+                            'error': 'Failed to add to knowledge base collection'
+                        }
+                        failed += 1
                 else:
                     # Processing failed
                     state['files'][file_key] = {
