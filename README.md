@@ -13,6 +13,8 @@ A Docker container that periodically synchronizes files from a local mount with 
 
 ## Quick Start
 
+> 💡 **For more detailed examples**, see [EXAMPLES.md](EXAMPLES.md) which includes complete docker-compose configurations for various use cases.
+
 ### Using Docker Compose
 
 1. Create a `docker-compose.yml` file:
