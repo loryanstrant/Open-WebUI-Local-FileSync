@@ -21,6 +21,15 @@ services:
       FILES_DIR: /data
       ALLOWED_EXTENSIONS: .md,.txt,.pdf,.doc,.docx
       STATE_FILE: /app/sync_state.json
+      
+      # Knowledge Base Configuration (optional)
+      # Map directories to knowledge bases: "path1:kb_name1,path2:kb_name2"
+      # KNOWLEDGE_BASE_MAPPING: "docs:Documentation,guides:UserGuides"
+      
+      # Retry Configuration (optional)
+      MAX_RETRY_ATTEMPTS: 3      # Maximum retry attempts for failed uploads
+      RETRY_DELAY: 60            # Delay in seconds between retries
+      UPLOAD_TIMEOUT: 300        # Timeout in seconds for upload processing
     volumes:
       # Mount your local directory containing files to sync
       - ./files:/data:ro

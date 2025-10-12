@@ -32,7 +32,11 @@ ENV TZ=UTC \
     ALLOWED_EXTENSIONS=.md,.txt,.pdf,.doc,.docx \
     STATE_FILE=/app/sync_state.json \
     OPENWEBUI_URL=http://localhost:8080 \
-    OPENWEBUI_API_KEY=
+    OPENWEBUI_API_KEY= \
+    KNOWLEDGE_BASE_MAPPING= \
+    MAX_RETRY_ATTEMPTS=3 \
+    RETRY_DELAY=60 \
+    UPLOAD_TIMEOUT=300
 
 # Volume for files to sync
 VOLUME ["/data"]
