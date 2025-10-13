@@ -6,6 +6,31 @@ This document describes the structure of the sync state file (`sync_state.json`)
 
 By default, the state file is located at `/app/sync_state.json` inside the container. You can customize this location using the `STATE_FILE` environment variable.
 
+**Important:** Ensure the state file location is persisted across container restarts by mounting it as a volume.
+
+### Automatic Initialization
+
+The sync script automatically:
+1. **Creates the state directory** if it doesn't exist
+2. **Creates an empty state file** if it doesn't exist
+3. **Validates permissions** before starting sync operations
+
+If the script cannot create or access the state file, it will exit with clear error messages indicating:
+- The exact path it's trying to access
+- Current file/directory permissions
+- Suggestions for fixing permission issues
+
+**Example initialization log output:**
+```
+[2025-10-13 12:29:03] Starting file sync...
+[2025-10-13 12:29:03] State directory does not exist: /app/state
+[2025-10-13 12:29:03] Attempting to create directory: /app/state
+[2025-10-13 12:29:03] ✓ Created state directory: /app/state
+[2025-10-13 12:29:03] State file does not exist: /app/state/sync_state.json
+[2025-10-13 12:29:03] Attempting to create initial state file...
+[2025-10-13 12:29:03] ✓ Created initial state file: /app/state/sync_state.json
+```
+
 ## Purpose
 
 The state file tracks:
@@ -218,6 +243,39 @@ docker cp ./sync_state_backup.json openwebui-filesync:/app/sync_state.json
 ```
 
 ## Troubleshooting
+
+### State file permissions errors
+
+If you see errors like:
+```
+[2025-10-13 12:29:03] ✗ ERROR: State directory is not writable: /app/state
+[2025-10-13 12:29:03]   Current permissions: 755
+[2025-10-13 12:29:03]   Please ensure the container has write permissions to this location
+```
+
+**Cause:** The container doesn't have write permissions to the state directory.
+
+**Solution:**
+
+1. **Check your volume mount** in docker-compose.yml:
+   ```yaml
+   volumes:
+     - ./state:/app/state  # Local directory must be writable
+   ```
+
+2. **Fix directory permissions** on the host:
+   ```bash
+   sudo chmod -R 777 ./state  # Or use appropriate ownership/permissions
+   ```
+
+3. **Alternative: Use a named volume** instead of a bind mount:
+   ```yaml
+   volumes:
+     - filesync-state:/app/state
+   
+   volumes:
+     filesync-state:
+   ```
 
 ### State file is corrupted
 

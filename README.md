@@ -14,6 +14,7 @@ A Docker container that periodically synchronizes files from a local mount with 
 - 🔁 **NEW:** Automatic retry logic with configurable attempts and delays
 - ✅ **NEW:** Upload processing verification with status tracking
 - 🔄 **NEW:** Automatic state backfilling from existing knowledge base files
+- 📝 **NEW:** Automatic state file initialization with permission validation
 
 ## Documentation
 
@@ -46,6 +47,7 @@ services:
       SYNC_TIME: "02:00"
     volumes:
       - ./your-files:/data:ro
+      - ./filesync-state:/app/state  # Persist state across restarts
     restart: unless-stopped
 ```
 
@@ -197,6 +199,8 @@ volumes:
   - /etc/docker/esphome:/data/esphome:ro
   - /etc/docker/evcc:/data/evcc:ro
   - /etc/docker/zigbee2mqtt:/data/zigbee2mqtt:ro
+  # Persist state between container restarts
+  - /etc/docker/openwebui-filesync:/app/state
 ```
 
 This is much cleaner than the old approach when all files go to the same knowledge base!
@@ -320,6 +324,35 @@ The sync script implements robust error handling:
 ## Volumes
 
 - `/data` - Mount your local directory containing files to sync (read-only recommended)
+- `/app/state` - **Recommended:** Mount a volume to persist the sync state file across container restarts
+
+### State File Persistence
+
+To avoid duplicate content errors and maintain sync history across container restarts, mount a volume for the state file:
+
+```yaml
+volumes:
+  - ./your-files:/data:ro
+  - ./filesync-state:/app/state  # Persist state file
+```
+
+Or use the `STATE_FILE` environment variable to customize the location:
+
+```yaml
+environment:
+  STATE_FILE: /app/state/sync_state.json
+volumes:
+  - ./your-files:/data:ro
+  - ./filesync-state:/app/state
+```
+
+**Benefits of persisting state:**
+- Prevents duplicate uploads when container restarts
+- Maintains knowledge base associations
+- Preserves retry attempts and upload history
+- Faster sync times (only new/changed files are uploaded)
+
+**Note:** The sync script automatically creates the state directory and file if they don't exist, with full permission validation.
 
 ## Advanced Documentation
 
