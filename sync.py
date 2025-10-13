@@ -21,6 +21,10 @@ STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
 
 # Knowledge base mapping: format "path1:kb_name1,path2:kb_name2"
 KNOWLEDGE_BASE_MAPPING = os.getenv('KNOWLEDGE_BASE_MAPPING', '')
+# Single knowledge base name (all files go to this KB)
+KNOWLEDGE_BASE_NAME = os.getenv('KNOWLEDGE_BASE_NAME', '')
+# JSON array format: [{"path": "path1", "kb": "kb_name1"}, ...]
+KNOWLEDGE_BASE_MAPPINGS = os.getenv('KNOWLEDGE_BASE_MAPPINGS', '')
 
 # Retry configuration
 MAX_RETRY_ATTEMPTS = int(os.getenv('MAX_RETRY_ATTEMPTS', '3'))
@@ -33,41 +37,79 @@ def log(message):
     print(f"[{timestamp}] {message}", flush=True)
 
 def parse_knowledge_base_mapping():
-    """Parse knowledge base mapping from environment variable
+    """Parse knowledge base mapping from environment variables
     
-    Format: "path1:kb_name1,path2:kb_name2"
+    Supports three formats:
+    1. Single KB (KNOWLEDGE_BASE_NAME): All files go to one knowledge base
+    2. JSON array (KNOWLEDGE_BASE_MAPPINGS): [{"path": "path1", "kb": "kb_name1"}, ...]
+    3. Legacy (KNOWLEDGE_BASE_MAPPING): "path1:kb_name1,path2:kb_name2"
+    
     Returns dict: {Path('path1'): 'kb_name1', Path('path2'): 'kb_name2'}
+    Returns None if single KB mode (all files go to KNOWLEDGE_BASE_NAME)
     """
+    # Priority 1: Single knowledge base - all files go to this KB
+    if KNOWLEDGE_BASE_NAME:
+        log(f"Using single knowledge base mode: {KNOWLEDGE_BASE_NAME}")
+        return None  # Special case: None means use single KB for all files
+    
     mapping = {}
-    if not KNOWLEDGE_BASE_MAPPING:
-        return mapping
     
-    try:
-        for entry in KNOWLEDGE_BASE_MAPPING.split(','):
-            entry = entry.strip()
-            if ':' in entry:
-                path, kb_name = entry.split(':', 1)
-                path = path.strip()
-                kb_name = kb_name.strip()
-                if path and kb_name:
-                    # Convert to absolute path if relative
-                    abs_path = Path(FILES_DIR) / path if not Path(path).is_absolute() else Path(path)
-                    mapping[abs_path] = kb_name
-    except Exception as e:
-        log(f"Error parsing KNOWLEDGE_BASE_MAPPING: {e}")
+    # Priority 2: JSON array format
+    if KNOWLEDGE_BASE_MAPPINGS:
+        try:
+            mappings_data = json.loads(KNOWLEDGE_BASE_MAPPINGS)
+            if isinstance(mappings_data, list):
+                for entry in mappings_data:
+                    if isinstance(entry, dict) and 'path' in entry and 'kb' in entry:
+                        path = entry['path'].strip()
+                        kb_name = entry['kb'].strip()
+                        if path and kb_name:
+                            # Convert to absolute path if relative
+                            abs_path = Path(FILES_DIR) / path if not Path(path).is_absolute() else Path(path)
+                            mapping[abs_path] = kb_name
+                log(f"Loaded {len(mapping)} mappings from KNOWLEDGE_BASE_MAPPINGS JSON array")
+                return mapping
+            else:
+                log("WARNING: KNOWLEDGE_BASE_MAPPINGS must be a JSON array")
+        except json.JSONDecodeError as e:
+            log(f"Error parsing KNOWLEDGE_BASE_MAPPINGS JSON: {e}")
+        except Exception as e:
+            log(f"Error processing KNOWLEDGE_BASE_MAPPINGS: {e}")
     
-    return mapping
+    # Priority 3: Legacy comma-separated format
+    if KNOWLEDGE_BASE_MAPPING:
+        try:
+            for entry in KNOWLEDGE_BASE_MAPPING.split(','):
+                entry = entry.strip()
+                if ':' in entry:
+                    path, kb_name = entry.split(':', 1)
+                    path = path.strip()
+                    kb_name = kb_name.strip()
+                    if path and kb_name:
+                        # Convert to absolute path if relative
+                        abs_path = Path(FILES_DIR) / path if not Path(path).is_absolute() else Path(path)
+                        mapping[abs_path] = kb_name
+            if mapping:
+                log(f"Loaded {len(mapping)} mappings from KNOWLEDGE_BASE_MAPPING (legacy format)")
+        except Exception as e:
+            log(f"Error parsing KNOWLEDGE_BASE_MAPPING: {e}")
+    
+    return mapping if mapping else {}
 
 def get_knowledge_base_for_file(filepath, kb_mapping):
     """Determine which knowledge base a file belongs to based on mapping
     
     Args:
         filepath: Path object of the file
-        kb_mapping: Dict mapping paths to knowledge base names
+        kb_mapping: Dict mapping paths to knowledge base names, or None for single KB mode
     
     Returns:
         Knowledge base name or None if no mapping found
     """
+    # Special case: single KB mode (all files go to KNOWLEDGE_BASE_NAME)
+    if kb_mapping is None and KNOWLEDGE_BASE_NAME:
+        return KNOWLEDGE_BASE_NAME
+    
     if not kb_mapping:
         return None
     
@@ -400,7 +442,9 @@ def sync_files():
     
     # Parse knowledge base mapping
     kb_mapping = parse_knowledge_base_mapping()
-    if kb_mapping:
+    if kb_mapping is None and KNOWLEDGE_BASE_NAME:
+        log(f"Single knowledge base mode: all files will go to '{KNOWLEDGE_BASE_NAME}'")
+    elif kb_mapping:
         log(f"Knowledge base mapping configured: {len(kb_mapping)} paths")
     
     files = get_files_to_sync()

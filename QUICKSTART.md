@@ -39,7 +39,36 @@ This configuration:
 
 To organize files into knowledge bases based on their directory:
 
-### Step 1: Organize Your Files
+### Approach 1: Single Knowledge Base (Simplest)
+
+When all your files should go to one knowledge base:
+
+```yaml
+version: '3.8'
+
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: openwebui-filesync
+    environment:
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: your_api_key_here
+      SYNC_SCHEDULE: daily
+      SYNC_TIME: "02:00"
+      
+      # All files go to this knowledge base
+      KNOWLEDGE_BASE_NAME: "MyDocumentation"
+      
+    volumes:
+      - ./my-documents:/data:ro
+    restart: unless-stopped
+```
+
+This is perfect when you have multiple directories or volumes but want them all in one knowledge base.
+
+### Approach 2: Multiple Knowledge Bases
+
+#### Step 1: Organize Your Files
 
 Create a directory structure:
 
@@ -55,7 +84,9 @@ my-documents/
     └── common-questions.md
 ```
 
-### Step 2: Create docker-compose.yml
+#### Step 2: Create docker-compose.yml
+
+**Option A: Using JSON Array Format (Recommended)**
 
 ```yaml
 version: '3.8'
@@ -70,12 +101,25 @@ services:
       SYNC_SCHEDULE: daily
       SYNC_TIME: "02:00"
       
-      # Map directories to knowledge bases
-      KNOWLEDGE_BASE_MAPPING: "technical-docs:Technical_Documentation,user-guides:User_Guides,faqs:FAQ"
+      # Map directories to knowledge bases using JSON array
+      KNOWLEDGE_BASE_MAPPINGS: |
+        [
+          {"path": "technical-docs", "kb": "Technical_Documentation"},
+          {"path": "user-guides", "kb": "User_Guides"},
+          {"path": "faqs", "kb": "FAQ"}
+        ]
       
     volumes:
       - ./my-documents:/data:ro
     restart: unless-stopped
+```
+
+**Option B: Using Legacy Format**
+
+```yaml
+environment:
+  # Map directories to knowledge bases (comma-separated)
+  KNOWLEDGE_BASE_MAPPING: "technical-docs:Technical_Documentation,user-guides:User_Guides,faqs:FAQ"
 ```
 
 ### Step 3: Start the Container
@@ -120,7 +164,9 @@ environment:
 
 ### Multiple Volume Mounts
 
-If your files are in different locations:
+If your files are in different physical locations on disk:
+
+**Option 1: All to one knowledge base (simplest)**
 
 ```yaml
 services:
@@ -129,11 +175,41 @@ services:
     environment:
       OPENWEBUI_URL: http://openwebui:8080
       OPENWEBUI_API_KEY: your_api_key_here
-      KNOWLEDGE_BASE_MAPPING: "team-docs:Team_Docs,customer-docs:Customer_Docs,internal:Internal_KB"
+      KNOWLEDGE_BASE_NAME: "AllDocumentation"
     volumes:
       - /path/to/team/docs:/data/team-docs:ro
       - /path/to/customer/docs:/data/customer-docs:ro
       - /path/to/internal:/data/internal:ro
+    restart: unless-stopped
+```
+
+**Option 2: Separate knowledge bases (JSON array)**
+
+```yaml
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    environment:
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: your_api_key_here
+      KNOWLEDGE_BASE_MAPPINGS: |
+        [
+          {"path": "team-docs", "kb": "Team_Docs"},
+          {"path": "customer-docs", "kb": "Customer_Docs"},
+          {"path": "internal", "kb": "Internal_KB"}
+        ]
+    volumes:
+      - /path/to/team/docs:/data/team-docs:ro
+      - /path/to/customer/docs:/data/customer-docs:ro
+      - /path/to/internal:/data/internal:ro
+    restart: unless-stopped
+```
+
+**Option 3: Legacy format**
+
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPING: "team-docs:Team_Docs,customer-docs:Customer_Docs,internal:Internal_KB"
     restart: unless-stopped
 ```
 
@@ -187,16 +263,23 @@ Status meanings:
 #### Issue: Files not going to correct knowledge base
 
 **Check:**
-1. Verify `KNOWLEDGE_BASE_MAPPING` syntax: `"path1:kb_name1,path2:kb_name2"`
+1. Verify you're using one of the supported formats:
+   - Single KB: `KNOWLEDGE_BASE_NAME: "MyKB"`
+   - JSON array: `KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}]'`
+   - Legacy: `KNOWLEDGE_BASE_MAPPING: "path1:kb_name1,path2:kb_name2"`
 2. Ensure paths match your volume mounts
 3. Paths are relative to `/data` inside the container
 
-**Example:**
+**Examples:**
 ```yaml
-# ❌ Wrong
-KNOWLEDGE_BASE_MAPPING: "/data/docs:Documentation"  # Don't include /data prefix
+# ❌ Wrong - includes /data prefix
+KNOWLEDGE_BASE_MAPPINGS: '[{"path": "/data/docs", "kb": "Documentation"}]'
 
-# ✅ Correct
+# ✅ Correct - relative to /data
+KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}]'
+
+# ✅ Also correct - single KB mode
+KNOWLEDGE_BASE_NAME: "Documentation"
 KNOWLEDGE_BASE_MAPPING: "docs:Documentation"  # Relative to /data
 ```
 

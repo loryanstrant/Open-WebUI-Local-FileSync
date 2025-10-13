@@ -22,8 +22,15 @@ services:
       ALLOWED_EXTENSIONS: .md,.txt,.pdf,.doc,.docx
       STATE_FILE: /app/sync_state.json
       
-      # Knowledge Base Configuration (optional)
-      # Map directories to knowledge bases: "path1:kb_name1,path2:kb_name2"
+      # Knowledge Base Configuration (optional - choose one approach)
+      # 
+      # Option 1: Single knowledge base (all files go to one KB)
+      # KNOWLEDGE_BASE_NAME: "MyDocumentation"
+      #
+      # Option 2: JSON array format (recommended for multiple KBs)
+      # KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}, {"path": "api", "kb": "API_Reference"}]'
+      #
+      # Option 3: Legacy comma-separated format (still supported)
       # KNOWLEDGE_BASE_MAPPING: "docs:Documentation,guides:UserGuides"
       
       # Retry Configuration (optional)

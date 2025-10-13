@@ -25,9 +25,9 @@ services:
     restart: unless-stopped
 ```
 
-## Example 1a: Knowledge Base Organization
+## Example 1a: Single Knowledge Base (Simplest)
 
-Sync files into organized knowledge bases based on directory structure:
+When all your files should go to one knowledge base:
 
 ```yaml
 version: '3.8'
@@ -42,7 +42,8 @@ services:
       TZ: America/New_York
       SYNC_SCHEDULE: daily
       SYNC_TIME: "02:00"
-      KNOWLEDGE_BASE_MAPPING: "product-docs:Product_Documentation,internal-wiki:Internal_Wiki,customer-guides:Customer_Guides"
+      # Simple: All files go to this knowledge base
+      KNOWLEDGE_BASE_NAME: "Documentation"
       ALLOWED_EXTENSIONS: .md,.txt,.pdf
       MAX_RETRY_ATTEMPTS: 5
       RETRY_DELAY: 120
@@ -54,11 +55,59 @@ services:
 ```
 
 This configuration:
-- Maps three different directories to three knowledge bases
+- All files from all three directories go to "Documentation" KB
+- Much simpler than mapping each directory separately
+- Retries failed uploads up to 5 times with 2-minute delays
+
+## Example 1b: Multiple Knowledge Bases with JSON Array
+
+When you want different directories in different knowledge bases:
+
+```yaml
+version: '3.8'
+
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: openwebui-filesync
+    environment:
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: sk-your-api-key-here
+      TZ: America/New_York
+      SYNC_SCHEDULE: daily
+      SYNC_TIME: "02:00"
+      # JSON array format for multiple knowledge bases
+      KNOWLEDGE_BASE_MAPPINGS: |
+        [
+          {"path": "product-docs", "kb": "Product_Documentation"},
+          {"path": "internal-wiki", "kb": "Internal_Wiki"},
+          {"path": "customer-guides", "kb": "Customer_Guides"}
+        ]
+      ALLOWED_EXTENSIONS: .md,.txt,.pdf
+      MAX_RETRY_ATTEMPTS: 5
+      RETRY_DELAY: 120
+    volumes:
+      - ./documentation/product-docs:/data/product-docs:ro
+      - ./documentation/internal-wiki:/data/internal-wiki:ro
+      - ./documentation/customer-guides:/data/customer-guides:ro
+    restart: unless-stopped
+```
+
+This configuration:
 - Product documentation goes to "Product_Documentation" KB
 - Internal wiki goes to "Internal_Wiki" KB
 - Customer guides go to "Customer_Guides" KB
+- More readable than comma-separated format
 - Retries failed uploads up to 5 times with 2-minute delays
+
+## Example 1c: Multiple Knowledge Bases (Legacy Format)
+
+The original format still works for backward compatibility:
+
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPING: "product-docs:Product_Documentation,internal-wiki:Internal_Wiki,customer-guides:Customer_Guides"
+```
 
 ## Example 2: Hourly Sync with Multiple File Types
 
@@ -166,8 +215,13 @@ services:
       TZ: UTC
       SYNC_SCHEDULE: daily
       SYNC_TIME: "03:00"
-      # Organize files into separate knowledge bases
-      KNOWLEDGE_BASE_MAPPING: "technical:Technical_Docs,product:Product_Info,support:Support_KB"
+      # Organize files into separate knowledge bases using JSON array
+      KNOWLEDGE_BASE_MAPPINGS: |
+        [
+          {"path": "technical", "kb": "Technical_Docs"},
+          {"path": "product", "kb": "Product_Info"},
+          {"path": "support", "kb": "Support_KB"}
+        ]
       # Configure retry behavior
       MAX_RETRY_ATTEMPTS: 5
       RETRY_DELAY: 120

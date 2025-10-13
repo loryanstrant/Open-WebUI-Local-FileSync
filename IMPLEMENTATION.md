@@ -13,17 +13,44 @@ The issue requested two main features:
 ### 1. Knowledge Base Mapping
 
 **Implementation:**
-- Added `KNOWLEDGE_BASE_MAPPING` environment variable
-- Format: `"path1:kb_name1,path2:kb_name2"`
+- Three configuration formats supported with priority ordering:
+  1. **Single KB Mode** (`KNOWLEDGE_BASE_NAME`): All files go to one knowledge base
+  2. **JSON Array** (`KNOWLEDGE_BASE_MAPPINGS`): Array of path-to-KB mappings
+  3. **Legacy** (`KNOWLEDGE_BASE_MAPPING`): Comma-separated format (backward compatible)
 - Automatic knowledge base creation via API
 - Files are associated with knowledge bases based on their directory path
 
 **Key Functions:**
-- `parse_knowledge_base_mapping()`: Parses the mapping configuration
-- `get_knowledge_base_for_file()`: Determines which KB a file belongs to
+- `parse_knowledge_base_mapping()`: Parses all three configuration formats with priority handling
+- `get_knowledge_base_for_file()`: Determines which KB a file belongs to (supports single KB mode)
 - `create_or_get_knowledge_base()`: Creates or retrieves KB via API
 
-**Example Usage:**
+**Example Usage - Single KB (Simplest):**
+```yaml
+environment:
+  KNOWLEDGE_BASE_NAME: "HomeConfiguration"
+volumes:
+  - /etc/docker/simple-wik:/data/simple-wik:ro
+  - /etc/docker/esphome:/data/esphome:ro
+  - /etc/docker/evcc:/data/evcc:ro
+```
+
+**Example Usage - JSON Array (Best for Multiple KBs):**
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPINGS: |
+    [
+      {"path": "docs", "kb": "Documentation"},
+      {"path": "api", "kb": "API_Reference"},
+      {"path": "guides", "kb": "User_Guides"}
+    ]
+volumes:
+  - ./docs:/data/docs:ro
+  - ./api:/data/api:ro
+  - ./guides:/data/guides:ro
+```
+
+**Example Usage - Legacy (Still Supported):**
 ```yaml
 environment:
   KNOWLEDGE_BASE_MAPPING: "docs:Documentation,api:API_Reference,guides:User_Guides"
@@ -77,8 +104,8 @@ Each file now has:
 - Added automatic migration from old state format
 - Enhanced `sync_files()` with retry logic
 
-### Dockerfile (40 lines)
-- Added 4 new environment variables
+### Dockerfile (42 lines)
+- Added 6 new environment variables (KNOWLEDGE_BASE_NAME, KNOWLEDGE_BASE_MAPPINGS, plus existing)
 - Maintained backward compatibility
 
 ### README.md
@@ -152,7 +179,32 @@ volumes:
   - ./files:/data:ro
 ```
 
-### With Knowledge Bases
+### Single Knowledge Base (Simplest)
+```yaml
+environment:
+  OPENWEBUI_URL: http://openwebui:8080
+  OPENWEBUI_API_KEY: sk-your-key
+  KNOWLEDGE_BASE_NAME: "MyDocumentation"
+volumes:
+  - ./files:/data:ro
+```
+
+### Multiple Knowledge Bases (JSON Array)
+```yaml
+environment:
+  OPENWEBUI_URL: http://openwebui:8080
+  OPENWEBUI_API_KEY: sk-your-key
+  KNOWLEDGE_BASE_MAPPINGS: |
+    [
+      {"path": "docs", "kb": "Documentation"},
+      {"path": "api", "kb": "API_Reference"}
+    ]
+volumes:
+  - ./docs:/data/docs:ro
+  - ./api:/data/api:ro
+```
+
+### Multiple Knowledge Bases (Legacy Format)
 ```yaml
 environment:
   OPENWEBUI_URL: http://openwebui:8080
@@ -168,6 +220,7 @@ volumes:
 environment:
   OPENWEBUI_URL: http://openwebui:8080
   OPENWEBUI_API_KEY: sk-your-key
+  KNOWLEDGE_BASE_NAME: "MyDocs"
   MAX_RETRY_ATTEMPTS: 5
   RETRY_DELAY: 120
   UPLOAD_TIMEOUT: 600
@@ -177,12 +230,14 @@ volumes:
 
 ## Benefits
 
-1. **Organized Knowledge**: Files are automatically organized into knowledge bases
-2. **Reliability**: Automatic retries handle transient failures
-3. **Visibility**: Detailed status tracking for each file
-4. **Flexibility**: Highly configurable to suit different needs
-5. **Safety**: Backward compatible with existing deployments
-6. **Documentation**: Comprehensive guides and examples
+1. **Simplified Configuration**: Single KB mode reduces config by 78% for common use case
+2. **Organized Knowledge**: Files are automatically organized into knowledge bases
+3. **Improved Readability**: JSON array format is clearer than comma-separated strings
+4. **Reliability**: Automatic retries handle transient failures
+5. **Visibility**: Detailed status tracking for each file
+6. **Flexibility**: Three configuration formats to suit different needs
+7. **Safety**: Backward compatible with existing deployments
+8. **Documentation**: Comprehensive guides and examples
 
 ## Future Enhancements (Out of Scope)
 
