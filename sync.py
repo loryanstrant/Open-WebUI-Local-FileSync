@@ -352,6 +352,110 @@ def add_file_to_knowledge_base(kb_id, file_id):
         log(f"✗ Error adding file {file_id} to knowledge base {kb_id}: {e}")
         return False
 
+def get_knowledge_base_files(kb_id):
+    """Get list of files in a knowledge base
+    
+    Args:
+        kb_id: Knowledge base ID
+    
+    Returns:
+        List of file dicts with 'id', 'filename', 'hash' etc., or empty list if failed
+    """
+    if not kb_id:
+        return []
+    
+    url = f"{OPENWEBUI_URL.rstrip('/')}/api/v1/knowledge/{kb_id}"
+    headers = {
+        'Authorization': f'Bearer {OPENWEBUI_API_KEY}'
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            # The knowledge base response may have a 'files' field with file details
+            files = result.get('files', [])
+            return files if isinstance(files, list) else []
+        else:
+            log(f"Could not get files for knowledge base {kb_id}: {response.status_code}")
+            return []
+    except Exception as e:
+        log(f"Error getting files for knowledge base {kb_id}: {e}")
+        return []
+
+def backfill_state_from_knowledge_base(kb_name, kb_id, local_files, state):
+    """Backfill sync state by checking which local files already exist in the knowledge base
+    
+    Args:
+        kb_name: Name of the knowledge base
+        kb_id: Knowledge base ID
+        local_files: List of local file paths to check
+        state: Current state dict
+    
+    Returns:
+        Number of files backfilled
+    """
+    if not kb_id or not local_files:
+        return 0
+    
+    log(f"Checking for existing files in knowledge base: {kb_name}")
+    
+    # Get existing files from knowledge base
+    kb_files = get_knowledge_base_files(kb_id)
+    if not kb_files:
+        log(f"No existing files found in knowledge base {kb_name} or unable to retrieve")
+        return 0
+    
+    # Create a mapping of filename to file info for quick lookup
+    kb_files_map = {}
+    for kb_file in kb_files:
+        if isinstance(kb_file, dict):
+            filename = kb_file.get('filename') or kb_file.get('name')
+            if filename:
+                kb_files_map[filename] = kb_file
+    
+    backfilled_count = 0
+    
+    for filepath in local_files:
+        file_key = str(filepath.relative_to(FILES_DIR))
+        
+        # Skip if already in state
+        if file_key in state['files']:
+            file_state = state['files'][file_key]
+            # Only skip if status is uploaded - if failed, we may want to retry
+            if file_state.get('status') == 'uploaded':
+                continue
+        
+        # Check if file exists in knowledge base by filename
+        filename = filepath.name
+        if filename in kb_files_map:
+            kb_file = kb_files_map[filename]
+            file_id = kb_file.get('id')
+            
+            # Only backfill if we have a valid file ID
+            if not file_id:
+                continue
+            
+            # Get local file hash to store in state
+            file_hash = get_file_hash(filepath)
+            if file_hash is None:
+                continue
+            
+            # Backfill the state
+            state['files'][file_key] = {
+                'hash': file_hash,
+                'status': 'uploaded',
+                'file_id': file_id,
+                'last_attempt': datetime.now().isoformat(),
+                'retry_count': 0,
+                'knowledge_base': kb_name
+            }
+            backfilled_count += 1
+            log(f"↻ Backfilled state for existing file: {filename}")
+    
+    return backfilled_count
+
 def check_upload_status(file_id):
     """Check if an uploaded file has been processed successfully
     
@@ -449,6 +553,35 @@ def sync_files():
     
     files = get_files_to_sync()
     log(f"Found {len(files)} files to check")
+    
+    # Backfill state from existing knowledge base files
+    # This handles the case where state was not persisted but files already exist
+    backfilled_total = 0
+    if kb_mapping is None and KNOWLEDGE_BASE_NAME:
+        # Single KB mode - backfill from the single knowledge base
+        kb_id = create_or_get_knowledge_base(KNOWLEDGE_BASE_NAME, state)
+        if kb_id:
+            backfilled_total = backfill_state_from_knowledge_base(KNOWLEDGE_BASE_NAME, kb_id, files, state)
+    elif kb_mapping:
+        # Multiple KB mode - backfill from each knowledge base
+        kb_groups = {}
+        for filepath in files:
+            kb_name = get_knowledge_base_for_file(filepath, kb_mapping)
+            if kb_name:
+                if kb_name not in kb_groups:
+                    kb_groups[kb_name] = []
+                kb_groups[kb_name].append(filepath)
+        
+        for kb_name, kb_files in kb_groups.items():
+            kb_id = create_or_get_knowledge_base(kb_name, state)
+            if kb_id:
+                backfilled_count = backfill_state_from_knowledge_base(kb_name, kb_id, kb_files, state)
+                backfilled_total += backfilled_count
+    
+    if backfilled_total > 0:
+        log(f"Backfilled state for {backfilled_total} existing files")
+        # Save state after backfilling
+        save_state(state)
     
     uploaded = 0
     skipped = 0

@@ -35,6 +35,14 @@ This configuration:
 - ✅ Waits for processing verification
 - ❌ Does not organize files into knowledge bases
 
+> 💡 **Important:** Add a state volume to persist sync information between container restarts:
+> ```yaml
+> volumes:
+>   - ./files:/data:ro
+>   - ./state:/app/state  # Persist state
+> ```
+> Without state persistence, the script will re-check all files on every restart. However, it **automatically backfills** state from existing knowledge base files, preventing duplicate uploads.
+
 ## With Knowledge Base Organization
 
 To organize files into knowledge bases based on their directory:
