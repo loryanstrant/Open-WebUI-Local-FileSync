@@ -36,6 +36,68 @@ def log(message):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] {message}", flush=True)
 
+def verify_state_file_access():
+    """Verify that the state file directory exists and is writable
+    
+    Returns:
+        True if state file can be created/accessed, False otherwise
+    """
+    state_dir = os.path.dirname(STATE_FILE)
+    
+    # Check if directory exists
+    if not os.path.exists(state_dir):
+        log(f"State directory does not exist: {state_dir}")
+        log(f"Attempting to create directory: {state_dir}")
+        try:
+            os.makedirs(state_dir, exist_ok=True)
+            log(f"✓ Created state directory: {state_dir}")
+        except Exception as e:
+            log(f"✗ ERROR: Cannot create state directory {state_dir}: {e}")
+            log(f"  Please ensure the container has write permissions to this location")
+            return False
+    
+    # Check if directory is writable
+    if not os.access(state_dir, os.W_OK):
+        log(f"✗ ERROR: State directory is not writable: {state_dir}")
+        log(f"  Current permissions: {oct(os.stat(state_dir).st_mode)[-3:]}")
+        log(f"  Please ensure the container has write permissions to this location")
+        return False
+    
+    # Check if state file exists
+    if not os.path.exists(STATE_FILE):
+        log(f"State file does not exist: {STATE_FILE}")
+        log(f"Attempting to create initial state file...")
+        try:
+            # Create initial empty state
+            initial_state = {
+                'files': {},
+                'knowledge_bases': {}
+            }
+            with open(STATE_FILE, 'w') as f:
+                json.dump(initial_state, f, indent=2)
+            log(f"✓ Created initial state file: {STATE_FILE}")
+        except Exception as e:
+            log(f"✗ ERROR: Cannot create state file {STATE_FILE}: {e}")
+            log(f"  Please ensure the container has write permissions to this location")
+            return False
+    else:
+        # State file exists, check if it's readable and writable
+        if not os.access(STATE_FILE, os.R_OK):
+            log(f"✗ ERROR: State file is not readable: {STATE_FILE}")
+            log(f"  Current permissions: {oct(os.stat(STATE_FILE).st_mode)[-3:]}")
+            log(f"  Please ensure the container has read permissions to this file")
+            return False
+        
+        if not os.access(STATE_FILE, os.W_OK):
+            log(f"✗ ERROR: State file is not writable: {STATE_FILE}")
+            log(f"  Current permissions: {oct(os.stat(STATE_FILE).st_mode)[-3:]}")
+            log(f"  Please ensure the container has write permissions to this file")
+            return False
+        
+        log(f"✓ State file exists and is accessible: {STATE_FILE}")
+    
+    return True
+
 def parse_knowledge_base_mapping():
     """Parse knowledge base mapping from environment variables
     
@@ -534,6 +596,13 @@ def sync_files():
     
     if not OPENWEBUI_API_KEY:
         log("ERROR: OPENWEBUI_API_KEY not set")
+        sys.exit(1)
+    
+    # Verify state file access before proceeding
+    if not verify_state_file_access():
+        log("ERROR: Cannot access state file. Sync cannot proceed.")
+        log(f"Please check that the volume mount for state directory is correct")
+        log(f"Expected state file location: {STATE_FILE}")
         sys.exit(1)
     
     state = load_state()
