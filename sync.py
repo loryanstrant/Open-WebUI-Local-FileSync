@@ -433,6 +433,10 @@ def backfill_state_from_knowledge_base(kb_name, kb_id, local_files, state):
             kb_file = kb_files_map[filename]
             file_id = kb_file.get('id')
             
+            # Only backfill if we have a valid file ID
+            if not file_id:
+                continue
+            
             # Get local file hash to store in state
             file_hash = get_file_hash(filepath)
             if file_hash is None:
