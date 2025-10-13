@@ -84,6 +84,53 @@ This format is automatically migrated to the new format on first run. The migrat
 3. Adds an empty `knowledge_bases` section
 4. Sets all existing files to `uploaded` status
 
+## Automatic State Backfilling
+
+When the sync script runs, it automatically detects files that already exist in the knowledge base but are not in the state file. This handles scenarios where:
+- State was not persisted between container restarts
+- You're adding a new volume mount to an existing deployment
+- You manually deleted the state file but files still exist in OpenWebUI
+
+The backfill process:
+1. Queries each knowledge base for existing files
+2. Matches existing files with local files by filename
+3. Populates the state file with these matches
+4. Prevents "duplicate content detected" errors on subsequent syncs
+
+**Example scenario:**
+```yaml
+# Before: State not persisted
+services:
+  filesync:
+    volumes:
+      - ./docs:/data:ro
+    # No state volume mount
+
+# After: Adding state persistence
+services:
+  filesync:
+    volumes:
+      - ./docs:/data:ro
+      - ./state:/app/state  # New state volume
+```
+
+When the container restarts with the new state volume mount:
+- The script finds no existing state for your files
+- It queries OpenWebUI and discovers files already exist
+- It backfills the state automatically
+- No duplicate uploads occur
+
+**Log output during backfill:**
+```
+[2024-01-15 12:00:00] Starting file sync...
+[2024-01-15 12:00:00] Found 10 files to check
+[2024-01-15 12:00:01] Checking for existing files in knowledge base: Documentation
+[2024-01-15 12:00:01] ↻ Backfilled state for existing file: readme.md
+[2024-01-15 12:00:01] ↻ Backfilled state for existing file: guide.md
+[2024-01-15 12:00:01] Backfilled state for 8 existing files
+[2024-01-15 12:00:01] Sync complete: 0 uploaded, 8 skipped, 0 failed, 0 retried
+```
+
 ## Manual State Manipulation
 
 ### Reset All Files
@@ -187,6 +234,31 @@ If files remain in "processing" status indefinitely:
 ### Knowledge base IDs don't match OpenWebUI
 
 If you manually delete or recreate knowledge bases in OpenWebUI, remove the corresponding entries from the state file to allow the sync script to recreate them.
+
+### Duplicate content detected errors
+
+If you see errors like:
+```
+✗ Failed to add file to knowledge base: 400 - {"detail":"400: Duplicate content detected. Please provide unique content to proceed."}
+```
+
+**Cause:** Files already exist in OpenWebUI but the state file doesn't know about them.
+
+**Solution:** The script now automatically detects and backfills state for existing files. If you still see these errors:
+
+1. **Wait for the next sync cycle** - The backfill happens automatically on the first run
+2. **Check the logs** - Look for "Backfilled state for existing file" messages
+3. **Verify state persistence** - Ensure your state volume is properly mounted:
+   ```yaml
+   volumes:
+     - ./state:/app/state
+   ```
+4. **Manual fix** - If needed, remove the specific file from state to force a check:
+   ```bash
+   docker exec openwebui-filesync rm /app/sync_state.json
+   ```
+
+After the next sync, the state will be automatically backfilled from the knowledge base.
 
 ## Best Practices
 

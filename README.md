@@ -13,6 +13,7 @@ A Docker container that periodically synchronizes files from a local mount with 
 - 📚 **NEW:** Knowledge base organization with directory mapping
 - 🔁 **NEW:** Automatic retry logic with configurable attempts and delays
 - ✅ **NEW:** Upload processing verification with status tracking
+- 🔄 **NEW:** Automatic state backfilling from existing knowledge base files
 
 ## Documentation
 
@@ -396,6 +397,19 @@ docker logs -f openwebui-filesync
 2. Verify paths in `KNOWLEDGE_BASE_MAPPING` match your volume mounts
 3. Check container logs for knowledge base creation errors
 4. Paths are relative to `FILES_DIR` (default `/data`)
+
+### Duplicate content detected errors
+
+If you see "Duplicate content detected" errors:
+
+1. **Automatic backfill**: The script automatically detects existing files in the knowledge base and updates the state file. This happens on the first sync after adding state persistence.
+2. **Check logs**: Look for "Backfilled state for existing file" messages to confirm the backfill is working
+3. **Verify state persistence**: Ensure your state volume is mounted:
+   ```yaml
+   volumes:
+     - ./state:/app/state
+   ```
+4. If issues persist, see the [State File Format documentation](STATE_FORMAT.md#duplicate-content-detected-errors) for detailed troubleshooting steps.
 
 ## License
 
