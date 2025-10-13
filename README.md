@@ -97,15 +97,63 @@ docker run -d \
 
 ### Knowledge Base Configuration
 
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `KNOWLEDGE_BASE_MAPPING` | Map directory paths to knowledge base names (format: `path1:kb_name1,path2:kb_name2`) | _(empty)_ | `docs:Documentation,guides:UserGuides` |
+The tool supports three ways to organize files into knowledge bases:
 
-When `KNOWLEDGE_BASE_MAPPING` is configured:
-- Files are automatically organized into the specified knowledge bases
+#### Option 1: Single Knowledge Base (Simplest)
+
+Use when all files should go to one knowledge base:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `KNOWLEDGE_BASE_NAME` | Name of the knowledge base where all files will be stored | `MyDocumentation` |
+
+Example:
+```yaml
+environment:
+  KNOWLEDGE_BASE_NAME: "HomeConfiguration"
+volumes:
+  - ./my-files:/data:ro
+```
+
+#### Option 2: JSON Array Format (Recommended for Multiple)
+
+Use when you have multiple directories mapped to different knowledge bases:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `KNOWLEDGE_BASE_MAPPINGS` | JSON array of path-to-KB mappings | See below |
+
+Example:
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}, {"path": "api", "kb": "API_Reference"}]'
+volumes:
+  - ./documentation:/data:ro
+```
+
+#### Option 3: Legacy Format (Still Supported)
+
+Original comma-separated format:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `KNOWLEDGE_BASE_MAPPING` | Comma-separated path:kb pairs | `docs:Documentation,guides:UserGuides` |
+
+Example:
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPING: "docs:Documentation,api:API_Reference,guides:User_Guides"
+```
+
+**Priority Order:**
+1. `KNOWLEDGE_BASE_NAME` (single KB mode) - takes precedence if set
+2. `KNOWLEDGE_BASE_MAPPINGS` (JSON array) - used if no single KB name
+3. `KNOWLEDGE_BASE_MAPPING` (legacy) - fallback for backward compatibility
+
+**Notes:**
 - Knowledge bases are created automatically if they don't exist
 - Paths can be relative to `FILES_DIR` or absolute
-- Multiple mappings are separated by commas
+- When using single KB mode, all files from all paths go to the same knowledge base
 
 ### Retry and Upload Configuration
 
@@ -130,9 +178,9 @@ volumes:
   - ./your-files:/data:ro
 ```
 
-### Sync with knowledge base organization
+### Single knowledge base (all files to one KB)
 
-Organize files into different knowledge bases based on their directory:
+Perfect when you have one collection and multiple directories:
 
 ```yaml
 environment:
@@ -141,7 +189,29 @@ environment:
   TZ: America/New_York
   SYNC_SCHEDULE: daily
   SYNC_TIME: "02:00"
-  KNOWLEDGE_BASE_MAPPING: "docs:Documentation,api:API_Reference,guides:User_Guides"
+  KNOWLEDGE_BASE_NAME: "HomeConfiguration"
+volumes:
+  - /etc/docker/simple-wik:/data/simple-wik:ro
+  - /etc/docker/docker-documenter:/data/docker-documenter:ro
+  - /etc/docker/esphome:/data/esphome:ro
+  - /etc/docker/evcc:/data/evcc:ro
+  - /etc/docker/zigbee2mqtt:/data/zigbee2mqtt:ro
+```
+
+This is much cleaner than the old approach when all files go to the same knowledge base!
+
+### Multiple knowledge bases with JSON array format
+
+For organizing files into different knowledge bases based on directory:
+
+```yaml
+environment:
+  OPENWEBUI_URL: http://openwebui:8080
+  OPENWEBUI_API_KEY: your_api_key_here
+  TZ: America/New_York
+  SYNC_SCHEDULE: daily
+  SYNC_TIME: "02:00"
+  KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}, {"path": "api", "kb": "API_Reference"}, {"path": "guides", "kb": "User_Guides"}]'
 volumes:
   - ./documentation:/data:ro
 ```
@@ -151,7 +221,9 @@ In this example:
 - Files in `/data/api/` → stored in "API_Reference" knowledge base
 - Files in `/data/guides/` → stored in "User_Guides" knowledge base
 
-### Multiple knowledge bases with different volumes
+### Multiple volumes mapped to different knowledge bases
+
+Using JSON array format for clarity:
 
 ```yaml
 services:
@@ -163,11 +235,18 @@ services:
       OPENWEBUI_API_KEY: your_api_key_here
       SYNC_SCHEDULE: daily
       SYNC_TIME: "02:00"
-      KNOWLEDGE_BASE_MAPPING: "team-docs:Team_Documentation,customer-docs:Customer_Documentation"
+      KNOWLEDGE_BASE_MAPPINGS: '[{"path": "team-docs", "kb": "Team_Documentation"}, {"path": "customer-docs", "kb": "Customer_Documentation"}]'
     volumes:
       - ./team-docs:/data/team-docs:ro
       - ./customer-docs:/data/customer-docs:ro
     restart: unless-stopped
+```
+
+Or using legacy format (still supported):
+
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPING: "team-docs:Team_Documentation,customer-docs:Customer_Documentation"
 ```
 
 ### Daily sync at 2 AM EST
