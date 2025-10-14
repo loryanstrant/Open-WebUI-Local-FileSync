@@ -7,14 +7,16 @@ A Docker container that periodically synchronizes files from a local mount with 
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support
-- 📁 Multiple file format support (markdown, text, PDF, Word docs)
+- 📁 Multiple file format support (markdown, text, PDF, Word docs, JSON, YAML)
+- 🔄 **NEW:** Automatic JSON/YAML to Markdown conversion
 - 🔍 Smart sync: only uploads changed files
+- 🎯 **NEW:** Include/exclude filtering for files and folders per source
 - 🐳 Easy deployment with Docker
-- 📚 **NEW:** Knowledge base organization with directory mapping
-- 🔁 **NEW:** Automatic retry logic with configurable attempts and delays
-- ✅ **NEW:** Upload processing verification with status tracking
-- 🔄 **NEW:** Automatic state backfilling from existing knowledge base files
-- 📝 **NEW:** Automatic state file initialization with permission validation
+- 📚 Knowledge base organization with directory mapping
+- 🔁 Automatic retry logic with configurable attempts and delays
+- ✅ Upload processing verification with status tracking
+- 🔄 Automatic state backfilling from existing knowledge base files
+- 📝 Automatic state file initialization with permission validation
 
 ## Documentation
 
@@ -95,8 +97,10 @@ docker run -d \
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `FILES_DIR` | Directory inside container to sync from | `/data` |
-| `ALLOWED_EXTENSIONS` | Comma-separated list of file extensions to sync | `.md,.txt,.pdf,.doc,.docx` |
+| `ALLOWED_EXTENSIONS` | Comma-separated list of file extensions to sync | `.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml` |
 | `STATE_FILE` | Path to state file for tracking changes | `/app/sync_state.json` |
+
+**Note:** JSON and YAML files are automatically converted to Markdown format during upload for better readability in the knowledge base.
 
 ### Knowledge Base Configuration
 
@@ -120,19 +124,76 @@ volumes:
 
 #### Option 2: JSON Array Format (Recommended for Multiple)
 
-Use when you have multiple directories mapped to different knowledge bases:
+Use when you have multiple directories mapped to different knowledge bases. This format also supports include/exclude filtering:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `KNOWLEDGE_BASE_MAPPINGS` | JSON array of path-to-KB mappings | See below |
+| `KNOWLEDGE_BASE_MAPPINGS` | JSON array of path-to-KB mappings with optional filters | See below |
 
-Example:
+**Basic Example (without filters):**
 ```yaml
 environment:
   KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}, {"path": "api", "kb": "API_Reference"}]'
 volumes:
   - ./documentation:/data:ro
 ```
+
+**Advanced Example (with include/exclude filters):**
+```yaml
+environment:
+  KNOWLEDGE_BASE_MAPPINGS: |
+    [
+      {
+        "path": "esphome",
+        "kb": "ESPHome",
+        "exclude": ["*/*"],
+        "include": ["includes/*"]
+      },
+      {
+        "path": "docker-documenter-for-portainer",
+        "kb": "DockerDocs",
+        "exclude": ["*_2025*"]
+      },
+      {
+        "path": "zigbee2mqtt",
+        "kb": "Zigbee2MQTT",
+        "exclude": [".git/*", "*.log"]
+      }
+    ]
+volumes:
+  - /etc/docker/esphome:/data/esphome:ro
+  - /etc/docker/docker-documenter-for-portainer:/data/docker-documenter-for-portainer:ro
+  - /etc/docker/zigbee2mqtt:/data/zigbee2mqtt:ro
+```
+
+**Filter Configuration:**
+- `exclude`: Array of patterns to exclude files/folders
+  - Supports glob patterns (`*`, `?`)
+  - Supports substring matching (e.g., `"_2025"` excludes files with `_2025` in name)
+  - Examples: `["*/*"]` excludes all subdirectories, `["*.log"]` excludes log files
+- `include`: Array of patterns to include (overrides exclusions)
+  - Same pattern matching as exclude
+  - Useful for excluding subdirectories but including specific ones
+  - Example: Exclude `*/*` but include `includes/*`
+
+**Filter Examples:**
+1. **Exclude subdirectories but include specific folder:**
+   ```json
+   {"path": "esphome", "kb": "ESPHome", "exclude": ["*/*"], "include": ["includes/*"]}
+   ```
+   This excludes all subdirectories except the `includes` subdirectory.
+
+2. **Exclude files with specific pattern in name:**
+   ```json
+   {"path": "docker-docs", "kb": "DockerDocs", "exclude": ["*_2025*"]}
+   ```
+   This excludes any files containing `_2025` in the filename.
+
+3. **Exclude multiple patterns:**
+   ```json
+   {"path": "project", "kb": "Project", "exclude": [".git/*", "*.log", "temp/*", "*_backup*"]}
+   ```
+   This excludes git files, log files, temp directory, and backup files.
 
 #### Option 3: Legacy Format (Still Supported)
 
@@ -313,6 +374,43 @@ The sync script implements robust error handling:
 - **Automatic Retries**: Failed uploads are automatically retried (up to 3 attempts by default)
 - **Retry Delay**: Configurable delay (default 60 seconds) between retry attempts
 - **State Persistence**: Upload status is saved between sync runs to handle failures gracefully
+
+### JSON and YAML File Conversion
+
+JSON and YAML files are automatically converted to Markdown format before upload:
+
+- **Automatic Detection**: Files with `.json`, `.yaml`, or `.yml` extensions are automatically detected
+- **Markdown Conversion**: Content is converted to a readable Markdown format with proper formatting
+- **Structured Display**: Nested objects and arrays are displayed with proper indentation
+- **Temporary Files**: Converted files are created temporarily, uploaded, and then cleaned up
+- **No Original File Changes**: Original files remain unchanged on your filesystem
+
+**Example Conversion:**
+
+A JSON file like this:
+```json
+{
+  "name": "MyApp",
+  "version": "1.0.0",
+  "settings": {
+    "enabled": true,
+    "timeout": 30
+  }
+}
+```
+
+Is converted to Markdown:
+```markdown
+# myapp.json
+
+- **name:** MyApp
+- **version:** 1.0.0
+- **settings:**
+  - **enabled:** True
+  - **timeout:** 30
+```
+
+This makes configuration files much more readable in the Open WebUI knowledge base.
 
 ## Getting Your Open WebUI API Key
 

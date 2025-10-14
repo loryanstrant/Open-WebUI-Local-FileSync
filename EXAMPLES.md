@@ -259,6 +259,100 @@ docker run -d \
   ghcr.io/loryanstrant/open-webui-local-filesync:latest
 ```
 
+## Example 7: Home Configuration with Filters (Real-world)
+
+This example shows a real home automation setup with multiple services, using filters to control which files are synced:
+
+```yaml
+version: '3.8'
+
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: Open-WebUI-filesync
+    environment:
+      OPENWEBUI_URL: https://openwebui.strant.casa
+      OPENWEBUI_API_KEY: API-KEY
+      TZ: Australia/Melbourne
+      SYNC_SCHEDULE: daily
+      SYNC_TIME: "02:00"
+      STATE_FILE: /app/state/sync_state.json
+      # JSON configuration with include/exclude filters
+      KNOWLEDGE_BASE_MAPPINGS: |
+        [
+          {
+            "path": "simple-wik",
+            "kb": "SimpleWiki"
+          },
+          {
+            "path": "wikidocs",
+            "kb": "WikiDocs"
+          },
+          {
+            "path": "esphome",
+            "kb": "ESPHome",
+            "exclude": ["*/*"],
+            "include": ["includes/*"]
+          },
+          {
+            "path": "evcc",
+            "kb": "EVCC"
+          },
+          {
+            "path": "zigbee2mqtt",
+            "kb": "Zigbee2MQTT",
+            "exclude": [".git/*", "*.log", "database.db"]
+          },
+          {
+            "path": "docker-documenter-for-portainer",
+            "kb": "DockerDocs",
+            "exclude": ["*_2025*"]
+          }
+        ]
+    volumes:
+      - /etc/docker/simple-wik:/data/simple-wik:ro
+      - /etc/docker/wikidocs:/data/wikidocs:ro
+      - /etc/docker/esphome:/data/esphome:ro
+      - /etc/docker/evcc:/data/evcc:ro
+      - /etc/docker/zigbee2mqtt:/data/zigbee2mqtt:ro
+      - /etc/docker/docker-documenter-for-portainer:/data/docker-documenter-for-portainer:ro
+      # Persist state between container restarts
+      - /etc/docker/openwebui-filesync:/app/state
+    restart: unless-stopped
+```
+
+**This configuration demonstrates:**
+
+1. **Simple Wiki & Wiki Docs**: No filters - all files synced
+2. **ESPHome**: 
+   - Excludes all subdirectories with `"exclude": ["*/*"]`
+   - BUT includes the `includes` subdirectory with `"include": ["includes/*"]`
+   - This is perfect for configuration files that reference includes
+3. **EVCC**: No filters - all files synced
+4. **Zigbee2MQTT**:
+   - Excludes `.git` directory, log files, and database file
+   - Only configuration files and documentation are synced
+5. **Docker Documenter**:
+   - Excludes any files containing `_2025` in the filename
+   - Useful for excluding dated archives or temporary files
+
+**Filter Pattern Examples:**
+- `"*/*"` - All subdirectories
+- `"*_2025*"` - Files containing "_2025" anywhere in name
+- `".git/*"` - All files in .git directory
+- `"*.log"` - All log files
+- `"includes/*"` - All files in includes subdirectory (when used in include)
+
+**Alternative: Single Knowledge Base**
+
+If you prefer all files in one knowledge base, simply use:
+```yaml
+environment:
+  KNOWLEDGE_BASE_NAME: "HomeConfiguration"
+```
+And remove the `KNOWLEDGE_BASE_MAPPINGS` section. Note that filters are only supported in the `KNOWLEDGE_BASE_MAPPINGS` format.
+
+
 ## Monitoring and Logs
 
 To view the sync logs:
