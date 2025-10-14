@@ -95,12 +95,13 @@ def convert_yaml_to_markdown(yaml_data, filename):
     # YAML and JSON have similar structures, reuse the JSON converter
     return convert_json_to_markdown(yaml_data, filename)
 
-def should_process_file(filepath, filters):
+def should_process_file(filepath, filters, mapped_path=None):
     """Check if a file should be processed based on include/exclude filters
     
     Args:
         filepath: Path object of the file to check
         filters: Dict with 'exclude' and 'include' pattern lists
+        mapped_path: Path object of the mapped knowledge base path (for relative pattern matching)
     
     Returns:
         True if file should be processed, False if it should be skipped
@@ -108,25 +109,35 @@ def should_process_file(filepath, filters):
     if not filters:
         return True
     
-    # Get relative path from FILES_DIR for pattern matching
-    try:
-        rel_path = str(filepath.relative_to(FILES_DIR))
-    except ValueError:
-        # If filepath is not relative to FILES_DIR, use absolute path
-        rel_path = str(filepath)
+    # Get relative path for pattern matching
+    # If mapped_path is provided, get path relative to that; otherwise use FILES_DIR
+    if mapped_path:
+        try:
+            rel_path = str(filepath.relative_to(mapped_path))
+        except ValueError:
+            # Fallback to FILES_DIR
+            try:
+                rel_path = str(filepath.relative_to(FILES_DIR))
+            except ValueError:
+                rel_path = str(filepath)
+    else:
+        try:
+            rel_path = str(filepath.relative_to(FILES_DIR))
+        except ValueError:
+            rel_path = str(filepath)
     
     # Check exclude patterns first
     exclude_patterns = filters.get('exclude', [])
     for pattern in exclude_patterns:
         # Support glob patterns and substring matching
         if '*' in pattern or '?' in pattern:
-            # Glob pattern
-            if filepath.match(pattern) or Path(rel_path).match(pattern):
+            # Glob pattern - use relative path for matching
+            if Path(rel_path).match(pattern):
                 # Check if any include pattern overrides this exclusion
                 include_patterns = filters.get('include', [])
                 for inc_pattern in include_patterns:
                     if '*' in inc_pattern or '?' in inc_pattern:
-                        if filepath.match(inc_pattern) or Path(rel_path).match(inc_pattern):
+                        if Path(rel_path).match(inc_pattern):
                             return True
                     else:
                         # Substring match for include
@@ -140,7 +151,7 @@ def should_process_file(filepath, filters):
                 include_patterns = filters.get('include', [])
                 for inc_pattern in include_patterns:
                     if '*' in inc_pattern or '?' in inc_pattern:
-                        if filepath.match(inc_pattern) or Path(rel_path).match(inc_pattern):
+                        if Path(rel_path).match(inc_pattern):
                             return True
                     else:
                         if inc_pattern in rel_path or inc_pattern in filepath.name:
@@ -358,14 +369,14 @@ def get_knowledge_base_for_file(filepath, kb_mapping, kb_filters):
         kb_filters: Dict mapping paths to filter configurations
     
     Returns:
-        Tuple of (knowledge_base_name, filters_dict) or (None, None) if no mapping found
+        Tuple of (knowledge_base_name, filters_dict, mapped_path) or (None, None, None) if no mapping found
     """
     # Special case: single KB mode (all files go to KNOWLEDGE_BASE_NAME)
     if kb_mapping is None and KNOWLEDGE_BASE_NAME:
-        return KNOWLEDGE_BASE_NAME, {}
+        return KNOWLEDGE_BASE_NAME, {}, None
     
     if not kb_mapping:
-        return None, {}
+        return None, {}, None
     
     # Check if file is under any mapped path
     for mapped_path, kb_name in kb_mapping.items():
@@ -374,12 +385,12 @@ def get_knowledge_base_for_file(filepath, kb_mapping, kb_filters):
             filepath.relative_to(mapped_path)
             # Get filters for this path if they exist
             filters = kb_filters.get(mapped_path, {})
-            return kb_name, filters
+            return kb_name, filters, mapped_path
         except ValueError:
             # Not relative to this path, continue
             continue
     
-    return None, {}
+    return None, {}, None
 
 def load_state():
     """Load previous sync state"""
@@ -829,7 +840,7 @@ def sync_files():
         # Multiple KB mode - backfill from each knowledge base
         kb_groups = {}
         for filepath in files:
-            kb_name, file_filters = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
+            kb_name, file_filters, kb_mapped_path = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
             if kb_name:
                 if kb_name not in kb_groups:
                     kb_groups[kb_name] = []
@@ -857,10 +868,10 @@ def sync_files():
         file_key = str(filepath.relative_to(FILES_DIR))
         
         # Determine knowledge base and filters for this file
-        kb_name, file_filters = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
+        kb_name, file_filters, kb_mapped_path = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
         
         # Check if file should be processed based on filters
-        if not should_process_file(filepath, file_filters):
+        if not should_process_file(filepath, file_filters, kb_mapped_path):
             log(f"⊗ Filtered: {filepath.name}")
             filtered += 1
             continue
