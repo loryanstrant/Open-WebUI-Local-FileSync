@@ -8,7 +8,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org requests
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org requests pyyaml
 
 # Create app directory
 WORKDIR /app
@@ -29,7 +29,7 @@ ENV TZ=UTC \
     SYNC_TIME=00:00 \
     SYNC_DAY=0 \
     FILES_DIR=/data \
-    ALLOWED_EXTENSIONS=.md,.txt,.pdf,.doc,.docx \
+    ALLOWED_EXTENSIONS=.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml \
     STATE_FILE=/app/sync_state.json \
     OPENWEBUI_URL=http://localhost:8080 \
     OPENWEBUI_API_KEY= \
