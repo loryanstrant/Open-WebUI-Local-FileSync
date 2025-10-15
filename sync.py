@@ -9,14 +9,21 @@ import hashlib
 import json
 import requests
 import time
+import re
+import tempfile
 from pathlib import Path
 from datetime import datetime
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 # Configuration from environment variables
 OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
 OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
 FILES_DIR = os.getenv('FILES_DIR', '/data')
-ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx').split(',')
+ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml').split(',')
 STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
 
 # Knowledge base mapping: format "path1:kb_name1,path2:kb_name2"
@@ -35,6 +42,185 @@ def log(message):
     """Log with timestamp"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] {message}", flush=True)
+
+def convert_json_to_markdown(json_data, filename):
+    """Convert JSON data to formatted Markdown
+    
+    Args:
+        json_data: Parsed JSON object
+        filename: Original filename for title
+    
+    Returns:
+        Markdown formatted string
+    """
+    lines = [f"# {filename}\n"]
+    
+    def format_value(value, indent=0):
+        """Recursively format JSON values to Markdown"""
+        prefix = "  " * indent
+        result = []
+        
+        if isinstance(value, dict):
+            for key, val in value.items():
+                if isinstance(val, (dict, list)):
+                    result.append(f"{prefix}- **{key}:**")
+                    result.extend(format_value(val, indent + 1))
+                else:
+                    result.append(f"{prefix}- **{key}:** {val}")
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                if isinstance(item, (dict, list)):
+                    result.append(f"{prefix}- Item {i + 1}:")
+                    result.extend(format_value(item, indent + 1))
+                else:
+                    result.append(f"{prefix}- {item}")
+        else:
+            result.append(f"{prefix}{value}")
+        
+        return result
+    
+    lines.extend(format_value(json_data))
+    return "\n".join(lines)
+
+def convert_yaml_to_markdown(yaml_data, filename):
+    """Convert YAML data to formatted Markdown
+    
+    Args:
+        yaml_data: Parsed YAML object
+        filename: Original filename for title
+    
+    Returns:
+        Markdown formatted string
+    """
+    # YAML and JSON have similar structures, reuse the JSON converter
+    return convert_json_to_markdown(yaml_data, filename)
+
+def should_process_file(filepath, filters, mapped_path=None):
+    """Check if a file should be processed based on include/exclude filters
+    
+    Args:
+        filepath: Path object of the file to check
+        filters: Dict with 'exclude' and 'include' pattern lists
+        mapped_path: Path object of the mapped knowledge base path (for relative pattern matching)
+    
+    Returns:
+        True if file should be processed, False if it should be skipped
+    """
+    if not filters:
+        return True
+    
+    # Get relative path for pattern matching
+    # If mapped_path is provided, get path relative to that; otherwise use FILES_DIR
+    if mapped_path:
+        try:
+            rel_path = str(filepath.relative_to(mapped_path))
+        except ValueError:
+            # Fallback to FILES_DIR
+            try:
+                rel_path = str(filepath.relative_to(FILES_DIR))
+            except ValueError:
+                rel_path = str(filepath)
+    else:
+        try:
+            rel_path = str(filepath.relative_to(FILES_DIR))
+        except ValueError:
+            rel_path = str(filepath)
+    
+    # Check exclude patterns first
+    exclude_patterns = filters.get('exclude', [])
+    for pattern in exclude_patterns:
+        # Support glob patterns and substring matching
+        if '*' in pattern or '?' in pattern:
+            # Glob pattern - use relative path for matching
+            if Path(rel_path).match(pattern):
+                # Check if any include pattern overrides this exclusion
+                include_patterns = filters.get('include', [])
+                for inc_pattern in include_patterns:
+                    if '*' in inc_pattern or '?' in inc_pattern:
+                        if Path(rel_path).match(inc_pattern):
+                            return True
+                    else:
+                        # Substring match for include
+                        if inc_pattern in rel_path or inc_pattern in filepath.name:
+                            return True
+                return False
+        else:
+            # Substring match for exclude
+            if pattern in rel_path or pattern in filepath.name:
+                # Check if any include pattern overrides
+                include_patterns = filters.get('include', [])
+                for inc_pattern in include_patterns:
+                    if '*' in inc_pattern or '?' in inc_pattern:
+                        if Path(rel_path).match(inc_pattern):
+                            return True
+                    else:
+                        if inc_pattern in rel_path or inc_pattern in filepath.name:
+                            return True
+                return False
+    
+    # If no exclusions matched, file should be processed
+    return True
+
+def convert_file_to_markdown(filepath):
+    """Convert JSON/YAML files to Markdown format
+    
+    Args:
+        filepath: Path to the file
+    
+    Returns:
+        Tuple of (success: bool, converted_filepath: Path or None, is_temp: bool)
+        - success: Whether conversion was successful or not needed
+        - converted_filepath: Path to the converted file (temp file) or original if no conversion
+        - is_temp: True if a temporary file was created that needs cleanup
+    """
+    ext = filepath.suffix.lower()
+    
+    # Only convert JSON and YAML files
+    if ext not in ['.json', '.yaml', '.yml']:
+        return True, filepath, False
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Parse based on extension
+        if ext == '.json':
+            try:
+                data = json.loads(content)
+                markdown_content = convert_json_to_markdown(data, filepath.name)
+            except json.JSONDecodeError as e:
+                log(f"⚠ Failed to parse JSON file {filepath.name}: {e}")
+                return False, None, False
+        elif ext in ['.yaml', '.yml']:
+            if yaml is None:
+                log(f"⚠ PyYAML not installed, cannot convert {filepath.name}")
+                return True, filepath, False
+            try:
+                data = yaml.safe_load(content)
+                markdown_content = convert_yaml_to_markdown(data, filepath.name)
+            except yaml.YAMLError as e:
+                log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
+                return False, None, False
+        
+        # Create temporary markdown file
+        temp_fd, temp_path = tempfile.mkstemp(suffix='.md', prefix=f"{filepath.stem}_")
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as temp_file:
+                temp_file.write(markdown_content)
+            log(f"✓ Converted {filepath.name} to Markdown")
+            return True, Path(temp_path), True
+        except Exception as e:
+            log(f"✗ Error writing converted file: {e}")
+            os.close(temp_fd)
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            return False, None, False
+            
+    except Exception as e:
+        log(f"✗ Error converting {filepath.name}: {e}")
+        return False, None, False
 
 def verify_state_file_access():
     """Verify that the state file directory exists and is writable
@@ -103,18 +289,21 @@ def parse_knowledge_base_mapping():
     
     Supports three formats:
     1. Single KB (KNOWLEDGE_BASE_NAME): All files go to one knowledge base
-    2. JSON array (KNOWLEDGE_BASE_MAPPINGS): [{"path": "path1", "kb": "kb_name1"}, ...]
+    2. JSON array (KNOWLEDGE_BASE_MAPPINGS): [{"path": "path1", "kb": "kb_name1", "exclude": [...], "include": [...]}, ...]
     3. Legacy (KNOWLEDGE_BASE_MAPPING): "path1:kb_name1,path2:kb_name2"
     
-    Returns dict: {Path('path1'): 'kb_name1', Path('path2'): 'kb_name2'}
-    Returns None if single KB mode (all files go to KNOWLEDGE_BASE_NAME)
+    Returns tuple: (mapping_dict, filters_dict)
+    - mapping_dict: {Path('path1'): 'kb_name1', Path('path2'): 'kb_name2'}
+    - filters_dict: {Path('path1'): {'exclude': [...], 'include': [...]}, ...}
+    Returns (None, {}) if single KB mode (all files go to KNOWLEDGE_BASE_NAME)
     """
     # Priority 1: Single knowledge base - all files go to this KB
     if KNOWLEDGE_BASE_NAME:
         log(f"Using single knowledge base mode: {KNOWLEDGE_BASE_NAME}")
-        return None  # Special case: None means use single KB for all files
+        return None, {}  # Special case: None means use single KB for all files
     
     mapping = {}
+    filters = {}
     
     # Priority 2: JSON array format
     if KNOWLEDGE_BASE_MAPPINGS:
@@ -129,8 +318,21 @@ def parse_knowledge_base_mapping():
                             # Convert to absolute path if relative
                             abs_path = Path(FILES_DIR) / path if not Path(path).is_absolute() else Path(path)
                             mapping[abs_path] = kb_name
+                            
+                            # Parse filters if present
+                            path_filters = {}
+                            if 'exclude' in entry and isinstance(entry['exclude'], list):
+                                path_filters['exclude'] = entry['exclude']
+                            if 'include' in entry and isinstance(entry['include'], list):
+                                path_filters['include'] = entry['include']
+                            
+                            if path_filters:
+                                filters[abs_path] = path_filters
+                
                 log(f"Loaded {len(mapping)} mappings from KNOWLEDGE_BASE_MAPPINGS JSON array")
-                return mapping
+                if filters:
+                    log(f"Loaded filters for {len(filters)} paths")
+                return mapping, filters
             else:
                 log("WARNING: KNOWLEDGE_BASE_MAPPINGS must be a JSON array")
         except json.JSONDecodeError as e:
@@ -156,36 +358,39 @@ def parse_knowledge_base_mapping():
         except Exception as e:
             log(f"Error parsing KNOWLEDGE_BASE_MAPPING: {e}")
     
-    return mapping if mapping else {}
+    return (mapping if mapping else {}, filters)
 
-def get_knowledge_base_for_file(filepath, kb_mapping):
+def get_knowledge_base_for_file(filepath, kb_mapping, kb_filters):
     """Determine which knowledge base a file belongs to based on mapping
     
     Args:
         filepath: Path object of the file
         kb_mapping: Dict mapping paths to knowledge base names, or None for single KB mode
+        kb_filters: Dict mapping paths to filter configurations
     
     Returns:
-        Knowledge base name or None if no mapping found
+        Tuple of (knowledge_base_name, filters_dict, mapped_path) or (None, None, None) if no mapping found
     """
     # Special case: single KB mode (all files go to KNOWLEDGE_BASE_NAME)
     if kb_mapping is None and KNOWLEDGE_BASE_NAME:
-        return KNOWLEDGE_BASE_NAME
+        return KNOWLEDGE_BASE_NAME, {}, None
     
     if not kb_mapping:
-        return None
+        return None, {}, None
     
     # Check if file is under any mapped path
     for mapped_path, kb_name in kb_mapping.items():
         try:
             # Check if filepath is relative to mapped_path
             filepath.relative_to(mapped_path)
-            return kb_name
+            # Get filters for this path if they exist
+            filters = kb_filters.get(mapped_path, {})
+            return kb_name, filters, mapped_path
         except ValueError:
             # Not relative to this path, continue
             continue
     
-    return None
+    return None, {}, None
 
 def load_state():
     """Load previous sync state"""
@@ -614,7 +819,7 @@ def sync_files():
         state['knowledge_bases'] = {}
     
     # Parse knowledge base mapping
-    kb_mapping = parse_knowledge_base_mapping()
+    kb_mapping, kb_filters = parse_knowledge_base_mapping()
     if kb_mapping is None and KNOWLEDGE_BASE_NAME:
         log(f"Single knowledge base mode: all files will go to '{KNOWLEDGE_BASE_NAME}'")
     elif kb_mapping:
@@ -635,7 +840,7 @@ def sync_files():
         # Multiple KB mode - backfill from each knowledge base
         kb_groups = {}
         for filepath in files:
-            kb_name = get_knowledge_base_for_file(filepath, kb_mapping)
+            kb_name, file_filters, kb_mapped_path = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
             if kb_name:
                 if kb_name not in kb_groups:
                     kb_groups[kb_name] = []
@@ -656,9 +861,21 @@ def sync_files():
     skipped = 0
     failed = 0
     retried = 0
+    filtered = 0
+    converted = 0
     
     for filepath in files:
         file_key = str(filepath.relative_to(FILES_DIR))
+        
+        # Determine knowledge base and filters for this file
+        kb_name, file_filters, kb_mapped_path = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
+        
+        # Check if file should be processed based on filters
+        if not should_process_file(filepath, file_filters, kb_mapped_path):
+            log(f"⊗ Filtered: {filepath.name}")
+            filtered += 1
+            continue
+        
         file_hash = get_file_hash(filepath)
         
         if file_hash is None:
@@ -698,8 +915,26 @@ def sync_files():
             retried += 1
             log(f"Retrying upload ({retry_count + 1}/{MAX_RETRY_ATTEMPTS}): {filepath.name}")
         
-        # Determine knowledge base for this file
-        kb_name = get_knowledge_base_for_file(filepath, kb_mapping)
+        # Convert JSON/YAML to Markdown if needed
+        conversion_success, upload_filepath, is_temp = convert_file_to_markdown(filepath)
+        
+        if not conversion_success:
+            log(f"✗ Failed to convert {filepath.name}, skipping")
+            state['files'][file_key] = {
+                'hash': file_hash,
+                'status': 'failed',
+                'last_attempt': datetime.now().isoformat(),
+                'retry_count': file_state.get('retry_count', 0) + 1,
+                'knowledge_base': kb_name,
+                'error': 'Conversion failed'
+            }
+            failed += 1
+            continue
+        
+        if is_temp:
+            converted += 1
+        
+        # Determine knowledge base for this file (kb_name already determined above)
         kb_id = None
         
         if kb_name:
@@ -716,10 +951,23 @@ def sync_files():
                     'error': 'Failed to create/get knowledge base'
                 }
                 failed += 1
+                # Clean up temp file if created
+                if is_temp:
+                    try:
+                        upload_filepath.unlink()
+                    except:
+                        pass
                 continue
         
-        # Upload file
-        success, file_id = upload_file_to_openwebui(filepath, file_hash, kb_id)
+        # Upload file (use converted file if available)
+        success, file_id = upload_file_to_openwebui(upload_filepath, file_hash, kb_id)
+        
+        # Clean up temp file after upload
+        if is_temp:
+            try:
+                upload_filepath.unlink()
+            except Exception as e:
+                log(f"⚠ Could not clean up temp file: {e}")
         
         if success:
             # Wait for processing if we got a file ID
@@ -792,7 +1040,7 @@ def sync_files():
     # Save updated state
     save_state(state)
     
-    log(f"Sync complete: {uploaded} uploaded, {skipped} skipped, {failed} failed, {retried} retried")
+    log(f"Sync complete: {uploaded} uploaded, {skipped} skipped, {failed} failed, {retried} retried, {filtered} filtered, {converted} converted")
 
 if __name__ == '__main__':
     sync_files()
