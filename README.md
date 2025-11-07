@@ -227,6 +227,113 @@ environment:
 | `RETRY_DELAY` | Delay in seconds between retry attempts | `60` |
 | `UPLOAD_TIMEOUT` | Timeout in seconds to wait for upload processing | `300` |
 
+### SSH Remote File Ingestion
+
+Fetch files from remote servers via SSH and sync them to Open WebUI. This feature allows you to:
+- Connect to multiple remote SSH servers
+- Specify multiple remote paths per server
+- Use password or SSH key authentication
+- Map remote files to specific knowledge bases
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SSH_REMOTE_SOURCES` | JSON array of SSH connection configurations (see below) | `""` (disabled) |
+| `SSH_KEY_PATH` | Directory containing SSH private keys for authentication | `/app/ssh_keys` |
+
+**SSH_REMOTE_SOURCES Format:**
+
+```json
+[
+  {
+    "host": "hostname or IP address",
+    "port": 22,
+    "username": "ssh_username",
+    "password": "password_if_using_password_auth",
+    "key_filename": "id_rsa",
+    "paths": ["/remote/path1", "/remote/path2"],
+    "kb": "Knowledge_Base_Name"
+  }
+]
+```
+
+**Configuration Fields:**
+- `host` (required): Hostname or IP address of the SSH server
+- `port` (optional): SSH port, defaults to 22
+- `username` (required): SSH username
+- `password` (optional): Password for password-based authentication
+- `key_filename` (optional): Filename of SSH private key (relative to `SSH_KEY_PATH` or absolute path)
+- `paths` (required): Array of remote file paths or directories to fetch
+- `kb` (optional): Knowledge base name for these files (uses default mapping if not specified)
+
+**Authentication Methods:**
+1. **Password Authentication**: Provide `password` field
+2. **SSH Key Authentication**: Provide `key_filename` field (and optionally `password` for key passphrase)
+
+**Example: Password Authentication**
+```yaml
+environment:
+  SSH_REMOTE_SOURCES: |
+    [
+      {
+        "host": "192.168.1.100",
+        "port": 22,
+        "username": "backup_user",
+        "password": "secure_password",
+        "paths": ["/home/user/documents", "/var/log/app.log"],
+        "kb": "Remote_Backups"
+      }
+    ]
+```
+
+**Example: SSH Key Authentication**
+```yaml
+environment:
+  SSH_REMOTE_SOURCES: |
+    [
+      {
+        "host": "server.example.com",
+        "username": "deploy",
+        "key_filename": "deploy_key",
+        "paths": ["/var/www/html/docs"],
+        "kb": "Production_Docs"
+      }
+    ]
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+**Example: Multiple SSH Sources**
+```yaml
+environment:
+  SSH_REMOTE_SOURCES: |
+    [
+      {
+        "host": "dev-server.local",
+        "username": "developer",
+        "password": "dev_pass",
+        "paths": ["/opt/app/config"],
+        "kb": "Dev_Config"
+      },
+      {
+        "host": "prod-server.com",
+        "username": "prod_user",
+        "key_filename": "prod_key",
+        "paths": ["/etc/app/config", "/var/app/docs"],
+        "kb": "Prod_Config"
+      }
+    ]
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+**Notes:**
+- Files are downloaded to temporary directories and processed like local files
+- SSH-fetched files respect `ALLOWED_EXTENSIONS` configuration
+- Temporary files are automatically cleaned up after sync
+- Each SSH source can target a different knowledge base
+- SSH connections timeout after 30 seconds
+- Directories are recursively downloaded (up to 10 levels deep)
+
 ## Examples
 
 ### Basic sync without knowledge bases
