@@ -326,6 +326,26 @@ volumes:
   - ./ssh_keys:/app/ssh_keys:ro
 ```
 
+**Security: SSH Host Key Verification**
+
+For improved security, you can provide a `known_hosts` file to verify SSH server identities:
+
+```yaml
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+Create a `known_hosts` file in your `./ssh_keys/` directory:
+```bash
+# Get the host key
+ssh-keyscan -H server.example.com >> ./ssh_keys/known_hosts
+
+# Or copy from your ~/.ssh/known_hosts
+cp ~/.ssh/known_hosts ./ssh_keys/known_hosts
+```
+
+If no `known_hosts` file is found, the container will accept any host key (AutoAddPolicy). This is less secure but may be necessary for dynamic environments. A warning will be logged when this occurs.
+
 **Notes:**
 - Files are downloaded to temporary directories and processed like local files
 - SSH-fetched files respect `ALLOWED_EXTENSIONS` configuration
@@ -333,6 +353,7 @@ volumes:
 - Each SSH source can target a different knowledge base
 - SSH connections timeout after 30 seconds
 - Directories are recursively downloaded (up to 10 levels deep)
+- Host key verification: Place a `known_hosts` file in the SSH keys directory for enhanced security
 
 ## Examples
 

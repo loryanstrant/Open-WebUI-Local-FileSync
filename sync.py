@@ -158,7 +158,20 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
     try:
         # Create SSH client
         ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Try to load known_hosts file if it exists
+        known_hosts_path = os.path.join(SSH_KEY_PATH, 'known_hosts')
+        if os.path.exists(known_hosts_path):
+            log(f"Loading known_hosts from: {known_hosts_path}")
+            ssh_client.load_host_keys(known_hosts_path)
+            ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        else:
+            # WARNING: AutoAddPolicy accepts any host key without verification
+            # This is a security risk but often necessary for automation
+            log(f"⚠ WARNING: No known_hosts file found at {known_hosts_path}")
+            log(f"⚠ WARNING: Using AutoAddPolicy - host keys will not be verified")
+            log(f"⚠ For better security, mount a known_hosts file to {known_hosts_path}")
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
         # Connect with appropriate authentication method
         connect_kwargs = {

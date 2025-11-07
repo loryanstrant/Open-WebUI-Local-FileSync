@@ -560,6 +560,54 @@ docker logs -f openwebui-filesync | grep -i ssh
 2. **Connection Timeout**: Verify host is reachable and port is correct
 3. **Permission Denied**: Ensure SSH key has correct permissions (600)
 4. **Key Not Found**: Check `key_filename` path is correct (relative to `/app/ssh_keys`)
+5. **Host Key Warning**: If you see warnings about host keys, add a `known_hosts` file (see Security section below)
+
+### SSH Security Best Practices
+
+**Host Key Verification:**
+
+For production use, it's strongly recommended to use a `known_hosts` file to verify SSH server identities:
+
+1. **Generate known_hosts file:**
+```bash
+# Create the SSH keys directory if it doesn't exist
+mkdir -p ./ssh_keys
+
+# Add host keys for your servers
+ssh-keyscan -H server1.example.com >> ./ssh_keys/known_hosts
+ssh-keyscan -H 192.168.1.100 >> ./ssh_keys/known_hosts
+ssh-keyscan -H server2.example.com >> ./ssh_keys/known_hosts
+
+# Or copy from your existing known_hosts
+cp ~/.ssh/known_hosts ./ssh_keys/known_hosts
+```
+
+2. **Mount the known_hosts file:**
+```yaml
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+3. **Verify it's working:**
+```bash
+# Check the logs - you should see "Loading known_hosts" messages
+docker logs openwebui-filesync | grep known_hosts
+```
+
+**Without known_hosts:**
+- The container will use `AutoAddPolicy` which accepts any host key
+- A warning will be logged on each connection
+- This is less secure but may be acceptable for trusted networks
+- First connection to each host is vulnerable to man-in-the-middle attacks
+
+**SSH Key Security:**
+```bash
+# Ensure correct permissions on SSH keys
+chmod 600 ./ssh_keys/id_rsa
+chmod 644 ./ssh_keys/id_rsa.pub
+chmod 644 ./ssh_keys/known_hosts
+chmod 700 ./ssh_keys
+```
 
 ## Monitoring and Logs
 
