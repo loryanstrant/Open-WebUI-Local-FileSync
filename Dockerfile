@@ -8,7 +8,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org requests pyyaml
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org requests pyyaml paramiko
 
 # Create app directory
 WORKDIR /app
@@ -21,7 +21,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/sync.py /app/entrypoint.sh
 
 # Create data directory
-RUN mkdir -p /data
+RUN mkdir -p /data /app/ssh_keys
 
 # Environment variables with defaults
 ENV TZ=UTC \
@@ -38,7 +38,9 @@ ENV TZ=UTC \
     KNOWLEDGE_BASE_MAPPING= \
     MAX_RETRY_ATTEMPTS=3 \
     RETRY_DELAY=60 \
-    UPLOAD_TIMEOUT=300
+    UPLOAD_TIMEOUT=300 \
+    SSH_REMOTE_SOURCES= \
+    SSH_KEY_PATH=/app/ssh_keys
 
 # Volume for files to sync
 VOLUME ["/data"]
