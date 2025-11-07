@@ -6,40 +6,25 @@ services:
     # For production, use the GHCR image:
     # image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
     container_name: openwebui-filesync
+    ports:
+      - "8000:8000"  # Web interface
     environment:
-      # Open WebUI Configuration
-      OPENWEBUI_URL: http://openwebui:8080
-      OPENWEBUI_API_KEY: your_api_key_here
+      # Legacy mode: Configure via environment variables (optional)
+      # Leave these commented to use the web interface configuration
       
-      # Sync Schedule Configuration
-      TZ: UTC                    # Timezone (e.g., America/New_York, Europe/London)
-      SYNC_SCHEDULE: daily       # Options: hourly, daily, weekly
-      SYNC_TIME: "00:00"         # Time of day to run (HH:MM format)
-      SYNC_DAY: "0"              # Day of week for weekly sync (0=Sunday, 1=Monday, etc. or mon,tue,wed,...)
+      # OPENWEBUI_URL: http://openwebui:8080
+      # OPENWEBUI_API_KEY: your_api_key_here
+      # TZ: UTC
+      # SYNC_SCHEDULE: daily
+      # SYNC_TIME: "00:00"
       
-      # File Configuration
-      FILES_DIR: /data
-      ALLOWED_EXTENSIONS: .md,.txt,.pdf,.doc,.docx
-      STATE_FILE: /app/sync_state.json
-      
-      # Knowledge Base Configuration (optional - choose one approach)
-      # 
-      # Option 1: Single knowledge base (all files go to one KB)
-      # KNOWLEDGE_BASE_NAME: "MyDocumentation"
-      #
-      # Option 2: JSON array format (recommended for multiple KBs)
-      # KNOWLEDGE_BASE_MAPPINGS: '[{"path": "docs", "kb": "Documentation"}, {"path": "api", "kb": "API_Reference"}]'
-      #
-      # Option 3: Legacy comma-separated format (still supported)
-      # KNOWLEDGE_BASE_MAPPING: "docs:Documentation,guides:UserGuides"
-      
-      # Retry Configuration (optional)
-      MAX_RETRY_ATTEMPTS: 3      # Maximum retry attempts for failed uploads
-      RETRY_DELAY: 60            # Delay in seconds between retries
-      UPLOAD_TIMEOUT: 300        # Timeout in seconds for upload processing
+      # Web interface settings
+      WEB_PORT: 8000
+      WEB_HOST: 0.0.0.0
     volumes:
       # Mount your local directory containing files to sync
       - ./files:/data:ro
-      # Optional: Persist state between container restarts
+      # Persist configuration and state between container restarts
+      - ./config:/app/config
       - ./state:/app/state
     restart: unless-stopped

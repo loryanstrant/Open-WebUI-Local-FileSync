@@ -24,31 +24,46 @@ try:
 except ImportError:
     paramiko = None
 
-# Configuration from environment variables
-OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
-OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
-FILES_DIR = os.getenv('FILES_DIR', '/data')
-ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml').split(',')
-STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
+# Import config management module
+try:
+    from config import get_config
+    USE_CONFIG_FILE = True
+except ImportError:
+    USE_CONFIG_FILE = False
 
-# Knowledge base mapping: format "path1:kb_name1,path2:kb_name2"
-KNOWLEDGE_BASE_MAPPING = os.getenv('KNOWLEDGE_BASE_MAPPING', '')
-# Single knowledge base name (all files go to this KB)
-KNOWLEDGE_BASE_NAME = os.getenv('KNOWLEDGE_BASE_NAME', '')
-# JSON array format: [{"path": "path1", "kb": "kb_name1"}, ...]
-KNOWLEDGE_BASE_MAPPINGS = os.getenv('KNOWLEDGE_BASE_MAPPINGS', '')
-
-# Retry configuration
-MAX_RETRY_ATTEMPTS = int(os.getenv('MAX_RETRY_ATTEMPTS', '3'))
-RETRY_DELAY = int(os.getenv('RETRY_DELAY', '60'))  # seconds
-UPLOAD_TIMEOUT = int(os.getenv('UPLOAD_TIMEOUT', '300'))  # seconds to wait for processing
-
-# SSH Remote Sources Configuration
-# JSON array format: [{"host": "hostname", "port": 22, "username": "user", "password": "pass", "paths": ["/path1", "/path2"], "kb": "KB_Name"}, ...]
-SSH_REMOTE_SOURCES = os.getenv('SSH_REMOTE_SOURCES', '')
-SSH_KEY_PATH = os.getenv('SSH_KEY_PATH', '/app/ssh_keys')
-# If true, require known_hosts file and reject unknown hosts (more secure)
-SSH_STRICT_HOST_KEY_CHECKING = os.getenv('SSH_STRICT_HOST_KEY_CHECKING', 'false').lower() == 'true'
+# Initialize configuration
+if USE_CONFIG_FILE:
+    _CONFIG = get_config()
+    OPENWEBUI_URL = _CONFIG['openwebui']['url']
+    OPENWEBUI_API_KEY = _CONFIG['openwebui']['api_key']
+    FILES_DIR = _CONFIG['files']['directory']
+    ALLOWED_EXTENSIONS = _CONFIG['files']['allowed_extensions']
+    STATE_FILE = _CONFIG['files']['state_file']
+    KNOWLEDGE_BASE_NAME = _CONFIG['knowledge_bases']['single_kb_name'] if _CONFIG['knowledge_bases']['single_kb_mode'] else ''
+    KNOWLEDGE_BASE_MAPPINGS = json.dumps(_CONFIG['knowledge_bases']['mappings']) if _CONFIG['knowledge_bases']['mappings'] else ''
+    KNOWLEDGE_BASE_MAPPING = ''  # Legacy format, not used with config file
+    MAX_RETRY_ATTEMPTS = _CONFIG['retry']['max_attempts']
+    RETRY_DELAY = _CONFIG['retry']['delay']
+    UPLOAD_TIMEOUT = _CONFIG['retry']['upload_timeout']
+    SSH_REMOTE_SOURCES = json.dumps(_CONFIG['ssh']['sources']) if _CONFIG['ssh']['enabled'] and _CONFIG['ssh']['sources'] else ''
+    SSH_KEY_PATH = _CONFIG['ssh']['key_path']
+    SSH_STRICT_HOST_KEY_CHECKING = _CONFIG['ssh']['strict_host_key_checking']
+else:
+    # Fallback to environment variables
+    OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
+    OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
+    FILES_DIR = os.getenv('FILES_DIR', '/data')
+    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml').split(',')
+    STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
+    KNOWLEDGE_BASE_MAPPING = os.getenv('KNOWLEDGE_BASE_MAPPING', '')
+    KNOWLEDGE_BASE_NAME = os.getenv('KNOWLEDGE_BASE_NAME', '')
+    KNOWLEDGE_BASE_MAPPINGS = os.getenv('KNOWLEDGE_BASE_MAPPINGS', '')
+    MAX_RETRY_ATTEMPTS = int(os.getenv('MAX_RETRY_ATTEMPTS', '3'))
+    RETRY_DELAY = int(os.getenv('RETRY_DELAY', '60'))
+    UPLOAD_TIMEOUT = int(os.getenv('UPLOAD_TIMEOUT', '300'))
+    SSH_REMOTE_SOURCES = os.getenv('SSH_REMOTE_SOURCES', '')
+    SSH_KEY_PATH = os.getenv('SSH_KEY_PATH', '/app/ssh_keys')
+    SSH_STRICT_HOST_KEY_CHECKING = os.getenv('SSH_STRICT_HOST_KEY_CHECKING', 'false').lower() == 'true'
 
 def log(message):
     """Log with timestamp"""
