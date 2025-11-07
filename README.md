@@ -17,6 +17,8 @@ A Docker container that periodically synchronizes files from a local mount with 
 - ✅ Upload processing verification with status tracking
 - 🔄 Automatic state backfilling from existing knowledge base files
 - 📝 Automatic state file initialization with permission validation
+- 🔐 **NEW:** SSH remote file ingestion with password and key authentication
+- 🛡️ **NEW:** SSH host key verification support for enhanced security
 
 ## Documentation
 
@@ -29,6 +31,8 @@ A Docker container that periodically synchronizes files from a local mount with 
 ## Quick Start
 
 > 💡 **For more detailed examples**, see [EXAMPLES.md](EXAMPLES.md) which includes complete docker-compose configurations for various use cases.
+> 
+> 📡 **For SSH remote file ingestion**, see [docker-compose-ssh-example.yml](docker-compose-ssh-example.yml) for a ready-to-use configuration.
 
 ### Using Docker Compose
 
@@ -226,6 +230,152 @@ environment:
 | `MAX_RETRY_ATTEMPTS` | Maximum number of retry attempts for failed uploads | `3` |
 | `RETRY_DELAY` | Delay in seconds between retry attempts | `60` |
 | `UPLOAD_TIMEOUT` | Timeout in seconds to wait for upload processing | `300` |
+
+### SSH Remote File Ingestion
+
+Fetch files from remote servers via SSH and sync them to Open WebUI. This feature allows you to:
+- Connect to multiple remote SSH servers
+- Specify multiple remote paths per server
+- Use password or SSH key authentication
+- Map remote files to specific knowledge bases
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SSH_REMOTE_SOURCES` | JSON array of SSH connection configurations (see below) | `""` (disabled) |
+| `SSH_KEY_PATH` | Directory containing SSH private keys for authentication | `/app/ssh_keys` |
+| `SSH_STRICT_HOST_KEY_CHECKING` | Enforce host key verification (requires known_hosts file) | `false` |
+
+**SSH_REMOTE_SOURCES Format:**
+
+```json
+[
+  {
+    "host": "hostname or IP address",
+    "port": 22,
+    "username": "ssh_username",
+    "password": "password_if_using_password_auth",
+    "key_filename": "id_rsa",
+    "paths": ["/remote/path1", "/remote/path2"],
+    "kb": "Knowledge_Base_Name"
+  }
+]
+```
+
+**Configuration Fields:**
+- `host` (required): Hostname or IP address of the SSH server
+- `port` (optional): SSH port, defaults to 22
+- `username` (required): SSH username
+- `password` (optional): Password for password-based authentication
+- `key_filename` (optional): Filename of SSH private key (relative to `SSH_KEY_PATH` or absolute path)
+- `paths` (required): Array of remote file paths or directories to fetch
+- `kb` (optional): Knowledge base name for these files (uses default mapping if not specified)
+
+**Authentication Methods:**
+1. **Password Authentication**: Provide `password` field
+2. **SSH Key Authentication**: Provide `key_filename` field (and optionally `password` for key passphrase)
+
+**Example: Password Authentication**
+```yaml
+environment:
+  SSH_REMOTE_SOURCES: |
+    [
+      {
+        "host": "192.168.1.100",
+        "port": 22,
+        "username": "backup_user",
+        "password": "secure_password",
+        "paths": ["/home/user/documents", "/var/log/app.log"],
+        "kb": "Remote_Backups"
+      }
+    ]
+```
+
+**Example: SSH Key Authentication**
+```yaml
+environment:
+  SSH_REMOTE_SOURCES: |
+    [
+      {
+        "host": "server.example.com",
+        "username": "deploy",
+        "key_filename": "deploy_key",
+        "paths": ["/var/www/html/docs"],
+        "kb": "Production_Docs"
+      }
+    ]
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+**Example: Multiple SSH Sources**
+```yaml
+environment:
+  SSH_REMOTE_SOURCES: |
+    [
+      {
+        "host": "dev-server.local",
+        "username": "developer",
+        "password": "dev_pass",
+        "paths": ["/opt/app/config"],
+        "kb": "Dev_Config"
+      },
+      {
+        "host": "prod-server.com",
+        "username": "prod_user",
+        "key_filename": "prod_key",
+        "paths": ["/etc/app/config", "/var/app/docs"],
+        "kb": "Prod_Config"
+      }
+    ]
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+**Security: SSH Host Key Verification**
+
+For improved security, you can provide a `known_hosts` file to verify SSH server identities:
+
+```yaml
+volumes:
+  - ./ssh_keys:/app/ssh_keys:ro
+```
+
+Create a `known_hosts` file in your `./ssh_keys/` directory:
+```bash
+# Get the host key
+ssh-keyscan -H server.example.com >> ./ssh_keys/known_hosts
+
+# Or copy from your ~/.ssh/known_hosts
+cp ~/.ssh/known_hosts ./ssh_keys/known_hosts
+```
+
+**Host Key Checking Modes:**
+
+1. **Default Mode** (`SSH_STRICT_HOST_KEY_CHECKING=false`):
+   - If `known_hosts` exists: Uses it for verification (secure)
+   - If `known_hosts` missing: Falls back to AutoAddPolicy with warnings
+   - Suitable for most use cases where convenience is needed
+
+2. **Strict Mode** (`SSH_STRICT_HOST_KEY_CHECKING=true`):
+   - **Requires** a `known_hosts` file
+   - Connections fail if host key cannot be verified
+   - Maximum security, recommended for production environments
+   - Example:
+   ```yaml
+   environment:
+     SSH_STRICT_HOST_KEY_CHECKING: "true"
+   volumes:
+     - ./ssh_keys:/app/ssh_keys:ro
+   ```
+
+**Notes:**
+- Files are downloaded to temporary directories and processed like local files
+- SSH-fetched files respect `ALLOWED_EXTENSIONS` configuration
+- Temporary files are automatically cleaned up after sync
+- Each SSH source can target a different knowledge base
+- SSH connections timeout after 30 seconds
+- Directories are recursively downloaded (up to 10 levels deep)
+- Host key verification: Place a `known_hosts` file in the SSH keys directory for enhanced security
 
 ## Examples
 

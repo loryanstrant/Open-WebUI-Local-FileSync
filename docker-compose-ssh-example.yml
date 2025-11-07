@@ -1,0 +1,69 @@
+version: '3.8'
+
+# Example docker-compose configuration for SSH remote file ingestion
+# This example demonstrates how to sync files from remote SSH servers to Open WebUI
+
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: openwebui-filesync-ssh
+    environment:
+      # Open WebUI connection settings
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: your_api_key_here
+      
+      # Timezone and schedule
+      TZ: America/New_York
+      SYNC_SCHEDULE: daily
+      SYNC_TIME: "02:00"
+      
+      # SSH Remote Sources Configuration
+      # This example shows multiple SSH servers with different authentication methods
+      SSH_REMOTE_SOURCES: |
+        [
+          {
+            "host": "server1.example.com",
+            "username": "deploy",
+            "key_filename": "server1_key",
+            "paths": ["/var/www/html/docs", "/etc/app/config"],
+            "kb": "Server1_Docs"
+          },
+          {
+            "host": "192.168.1.100",
+            "port": 2222,
+            "username": "backup_user",
+            "password": "secure_password",
+            "paths": ["/home/user/documents"],
+            "kb": "Server2_Backups"
+          }
+        ]
+      
+      # Optional: Enable strict host key checking for production
+      # SSH_STRICT_HOST_KEY_CHECKING: "true"
+      
+      # Optional: Customize retry behavior
+      MAX_RETRY_ATTEMPTS: 5
+      RETRY_DELAY: 120
+      UPLOAD_TIMEOUT: 600
+    
+    volumes:
+      # SSH keys directory (place your private keys here)
+      - ./ssh_keys:/app/ssh_keys:ro
+      
+      # Optional: Local files directory
+      # - ./local-files:/data:ro
+      
+      # State file persistence
+      - ./filesync-state:/app/state
+    
+    restart: unless-stopped
+
+# Note: Make sure your ssh_keys directory has the correct structure:
+# ./ssh_keys/
+#   ├── server1_key          (chmod 600)
+#   ├── server1_key.pub      (chmod 644)
+#   └── known_hosts          (optional, for host key verification)
+
+# To generate a known_hosts file:
+# ssh-keyscan -H server1.example.com >> ./ssh_keys/known_hosts
+# ssh-keyscan -H 192.168.1.100 >> ./ssh_keys/known_hosts

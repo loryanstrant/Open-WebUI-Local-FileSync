@@ -19,6 +19,11 @@ try:
 except ImportError:
     yaml = None
 
+try:
+    import paramiko
+except ImportError:
+    paramiko = None
+
 # Configuration from environment variables
 OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
 OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
@@ -38,10 +43,308 @@ MAX_RETRY_ATTEMPTS = int(os.getenv('MAX_RETRY_ATTEMPTS', '3'))
 RETRY_DELAY = int(os.getenv('RETRY_DELAY', '60'))  # seconds
 UPLOAD_TIMEOUT = int(os.getenv('UPLOAD_TIMEOUT', '300'))  # seconds to wait for processing
 
+# SSH Remote Sources Configuration
+# JSON array format: [{"host": "hostname", "port": 22, "username": "user", "password": "pass", "paths": ["/path1", "/path2"], "kb": "KB_Name"}, ...]
+SSH_REMOTE_SOURCES = os.getenv('SSH_REMOTE_SOURCES', '')
+SSH_KEY_PATH = os.getenv('SSH_KEY_PATH', '/app/ssh_keys')
+# If true, require known_hosts file and reject unknown hosts (more secure)
+SSH_STRICT_HOST_KEY_CHECKING = os.getenv('SSH_STRICT_HOST_KEY_CHECKING', 'false').lower() == 'true'
+
 def log(message):
     """Log with timestamp"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] {message}", flush=True)
+
+def parse_ssh_remote_sources():
+    """Parse SSH remote sources from environment variable
+    
+    Returns:
+        List of dicts with SSH connection details:
+        [
+            {
+                "host": "hostname or IP",
+                "port": 22,
+                "username": "user",
+                "password": "password" (optional),
+                "key_filename": "path/to/key" (optional),
+                "paths": ["/remote/path1", "/remote/path2"],
+                "kb": "Knowledge_Base_Name" (optional)
+            },
+            ...
+        ]
+    """
+    if not SSH_REMOTE_SOURCES:
+        return []
+    
+    try:
+        sources = json.loads(SSH_REMOTE_SOURCES)
+        if not isinstance(sources, list):
+            log("WARNING: SSH_REMOTE_SOURCES must be a JSON array")
+            return []
+        
+        # Validate and normalize each source
+        validated_sources = []
+        for i, source in enumerate(sources):
+            if not isinstance(source, dict):
+                log(f"WARNING: SSH source {i} is not a valid object, skipping")
+                continue
+            
+            if 'host' not in source or 'username' not in source or 'paths' not in source:
+                log(f"WARNING: SSH source {i} missing required fields (host, username, paths), skipping")
+                continue
+            
+            # Set defaults
+            source.setdefault('port', 22)
+            
+            # Ensure paths is a list
+            if isinstance(source['paths'], str):
+                source['paths'] = [source['paths']]
+            elif not isinstance(source['paths'], list):
+                log(f"WARNING: SSH source {i} has invalid 'paths' format, skipping")
+                continue
+            
+            # Check authentication method
+            has_password = 'password' in source and source['password']
+            has_key = 'key_filename' in source and source['key_filename']
+            
+            if not has_password and not has_key:
+                log(f"WARNING: SSH source {i} has no authentication method (password or key_filename), skipping")
+                continue
+            
+            # Resolve key_filename path if relative
+            if has_key:
+                key_path = source['key_filename']
+                if not os.path.isabs(key_path):
+                    # If relative, assume it's in SSH_KEY_PATH directory
+                    source['key_filename'] = os.path.join(SSH_KEY_PATH, key_path)
+            
+            validated_sources.append(source)
+        
+        return validated_sources
+    
+    except json.JSONDecodeError as e:
+        log(f"ERROR: Failed to parse SSH_REMOTE_SOURCES JSON: {e}")
+        return []
+    except Exception as e:
+        log(f"ERROR: Failed to process SSH_REMOTE_SOURCES: {e}")
+        return []
+
+def fetch_files_from_ssh(ssh_source, temp_dir):
+    """Fetch files from a remote SSH server
+    
+    Args:
+        ssh_source: Dict with SSH connection details (host, port, username, password/key_filename, paths, kb)
+        temp_dir: Path object pointing to temporary directory for downloaded files
+    
+    Returns:
+        Tuple of (success: bool, downloaded_files: list of Path objects, kb_name: str or None)
+    """
+    if paramiko is None:
+        log("ERROR: paramiko library not installed, cannot fetch files via SSH")
+        return False, [], None
+    
+    host = ssh_source['host']
+    port = ssh_source.get('port', 22)
+    username = ssh_source['username']
+    password = ssh_source.get('password')
+    key_filename = ssh_source.get('key_filename')
+    remote_paths = ssh_source['paths']
+    kb_name = ssh_source.get('kb')
+    
+    log(f"Connecting to SSH server: {username}@{host}:{port}")
+    
+    ssh_client = None
+    sftp_client = None
+    downloaded_files = []
+    
+    try:
+        # Create SSH client
+        ssh_client = paramiko.SSHClient()
+        
+        # Try to load known_hosts file if it exists
+        known_hosts_path = os.path.join(SSH_KEY_PATH, 'known_hosts')
+        if os.path.exists(known_hosts_path):
+            log(f"Loading known_hosts from: {known_hosts_path}")
+            ssh_client.load_host_keys(known_hosts_path)
+            ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        elif SSH_STRICT_HOST_KEY_CHECKING:
+            # Strict mode: Fail if no known_hosts file
+            log(f"✗ ERROR: SSH_STRICT_HOST_KEY_CHECKING is enabled but no known_hosts file found at {known_hosts_path}")
+            log(f"✗ ERROR: Cannot connect to {host} without host key verification")
+            return False, [], kb_name
+        else:
+            # WARNING: AutoAddPolicy accepts any host key without verification
+            # This is a security risk but often necessary for automation
+            # lgtm[py/paramiko-missing-host-key-validation]
+            log(f"⚠ WARNING: No known_hosts file found at {known_hosts_path}")
+            log(f"⚠ WARNING: Using AutoAddPolicy - host keys will not be verified")
+            log(f"⚠ For better security, mount a known_hosts file to {known_hosts_path}")
+            log(f"⚠ Or set SSH_STRICT_HOST_KEY_CHECKING=true to enforce host key verification")
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Connect with appropriate authentication method
+        connect_kwargs = {
+            'hostname': host,
+            'port': port,
+            'username': username,
+            'timeout': 30
+        }
+        
+        if key_filename:
+            # Key-based authentication
+            if not os.path.exists(key_filename):
+                log(f"ERROR: SSH key file not found: {key_filename}")
+                return False, [], kb_name
+            
+            log(f"Using SSH key authentication: {key_filename}")
+            connect_kwargs['key_filename'] = key_filename
+            
+            # If a passphrase is provided in the password field, use it
+            if password:
+                connect_kwargs['passphrase'] = password
+        else:
+            # Password authentication
+            log("Using password authentication")
+            connect_kwargs['password'] = password
+        
+        ssh_client.connect(**connect_kwargs)
+        log(f"✓ Connected to {host}")
+        
+        # Open SFTP session
+        sftp_client = ssh_client.open_sftp()
+        
+        # Process each remote path
+        for remote_path in remote_paths:
+            log(f"Fetching files from remote path: {remote_path}")
+            
+            try:
+                # Check if remote_path is a file or directory
+                remote_stat = sftp_client.stat(remote_path)
+                
+                # Import stat module for file type checking
+                import stat as stat_module
+                
+                if stat_module.S_ISREG(remote_stat.st_mode):
+                    # It's a file - download it directly
+                    downloaded = _download_ssh_file(sftp_client, remote_path, temp_dir, host)
+                    if downloaded:
+                        downloaded_files.extend(downloaded)
+                elif stat_module.S_ISDIR(remote_stat.st_mode):
+                    # It's a directory - recursively download files
+                    downloaded = _download_ssh_directory(sftp_client, remote_path, temp_dir, host)
+                    if downloaded:
+                        downloaded_files.extend(downloaded)
+                else:
+                    log(f"⚠ Remote path is neither file nor directory: {remote_path}")
+            
+            except FileNotFoundError:
+                log(f"✗ Remote path not found: {remote_path}")
+            except Exception as e:
+                log(f"✗ Error processing remote path {remote_path}: {e}")
+        
+        log(f"✓ Downloaded {len(downloaded_files)} files from {host}")
+        return True, downloaded_files, kb_name
+    
+    except paramiko.AuthenticationException:
+        log(f"✗ SSH authentication failed for {username}@{host}")
+        return False, [], kb_name
+    except paramiko.SSHException as e:
+        log(f"✗ SSH connection error to {host}: {e}")
+        return False, [], kb_name
+    except Exception as e:
+        log(f"✗ Error fetching files from {host}: {e}")
+        return False, [], kb_name
+    finally:
+        # Clean up connections
+        if sftp_client:
+            try:
+                sftp_client.close()
+            except:
+                pass
+        if ssh_client:
+            try:
+                ssh_client.close()
+            except:
+                pass
+
+def _download_ssh_file(sftp_client, remote_filepath, local_dir, host):
+    """Download a single file from SSH server
+    
+    Args:
+        sftp_client: Active SFTP client
+        remote_filepath: Path to remote file
+        local_dir: Path object for local directory
+        host: Hostname for logging
+    
+    Returns:
+        List containing Path object of downloaded file, or empty list if failed
+    """
+    try:
+        # Get file extension
+        file_ext = os.path.splitext(remote_filepath)[1].lower()
+        
+        # Check if extension is allowed
+        if file_ext not in ALLOWED_EXTENSIONS:
+            return []
+        
+        # Create local filename (preserve filename, create subdirs if needed)
+        filename = os.path.basename(remote_filepath)
+        local_filepath = local_dir / filename
+        
+        # Ensure local directory exists
+        local_filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Download file
+        sftp_client.get(remote_filepath, str(local_filepath))
+        log(f"  ↓ Downloaded: {filename}")
+        
+        return [local_filepath]
+    
+    except Exception as e:
+        log(f"  ✗ Failed to download {remote_filepath}: {e}")
+        return []
+
+def _download_ssh_directory(sftp_client, remote_dirpath, local_dir, host, _depth=0):
+    """Recursively download files from SSH directory
+    
+    Args:
+        sftp_client: Active SFTP client
+        remote_dirpath: Path to remote directory
+        local_dir: Path object for local directory
+        host: Hostname for logging
+        _depth: Recursion depth (internal use)
+    
+    Returns:
+        List of Path objects of downloaded files
+    """
+    # Prevent excessive recursion
+    if _depth > 10:
+        log(f"  ⚠ Maximum recursion depth reached for {remote_dirpath}")
+        return []
+    
+    downloaded_files = []
+    
+    try:
+        # List directory contents
+        for entry in sftp_client.listdir_attr(remote_dirpath):
+            # Import stat module for file type checking
+            import stat as stat_module
+            
+            remote_path = os.path.join(remote_dirpath, entry.filename).replace('\\', '/')
+            
+            if stat_module.S_ISREG(entry.st_mode):
+                # It's a file - download it
+                files = _download_ssh_file(sftp_client, remote_path, local_dir, host)
+                downloaded_files.extend(files)
+            elif stat_module.S_ISDIR(entry.st_mode):
+                # It's a subdirectory - recurse into it
+                subdir_files = _download_ssh_directory(sftp_client, remote_path, local_dir, host, _depth + 1)
+                downloaded_files.extend(subdir_files)
+    
+    except Exception as e:
+        log(f"  ✗ Error listing directory {remote_dirpath}: {e}")
+    
+    return downloaded_files
 
 def convert_json_to_markdown(json_data, filename):
     """Convert JSON data to formatted Markdown
@@ -825,6 +1128,38 @@ def sync_files():
     elif kb_mapping:
         log(f"Knowledge base mapping configured: {len(kb_mapping)} paths")
     
+    # Fetch files from SSH remote sources if configured
+    ssh_sources = parse_ssh_remote_sources()
+    ssh_temp_dirs = []  # Keep track of temp directories to clean up later
+    
+    if ssh_sources:
+        log(f"Found {len(ssh_sources)} SSH remote source(s) configured")
+        
+        for ssh_source in ssh_sources:
+            host = ssh_source.get('host', 'unknown')
+            log(f"Processing SSH source: {host}")
+            
+            # Create a temporary directory for this SSH source
+            temp_dir = Path(tempfile.mkdtemp(prefix=f"ssh_{host}_", dir=FILES_DIR))
+            ssh_temp_dirs.append(temp_dir)
+            
+            # Fetch files from SSH
+            success, downloaded_files, ssh_kb_name = fetch_files_from_ssh(ssh_source, temp_dir)
+            
+            if success and downloaded_files:
+                log(f"✓ Successfully fetched {len(downloaded_files)} files from {host}")
+                
+                # If this SSH source has a specific KB configured, create/update KB mapping
+                if ssh_kb_name:
+                    if kb_mapping is None:
+                        # Create a new mapping dict if in single KB mode
+                        kb_mapping = {}
+                    # Map the temp directory to the SSH source's KB
+                    kb_mapping[temp_dir] = ssh_kb_name
+                    log(f"Mapped SSH files from {host} to knowledge base: {ssh_kb_name}")
+            elif not success:
+                log(f"✗ Failed to fetch files from {host}")
+    
     files = get_files_to_sync()
     log(f"Found {len(files)} files to check")
     
@@ -1039,6 +1374,18 @@ def sync_files():
     
     # Save updated state
     save_state(state)
+    
+    # Clean up temporary SSH directories
+    if ssh_temp_dirs:
+        log("Cleaning up temporary SSH directories...")
+        for temp_dir in ssh_temp_dirs:
+            try:
+                if temp_dir.exists():
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                    log(f"✓ Removed temp directory: {temp_dir.name}")
+            except Exception as e:
+                log(f"⚠ Could not remove temp directory {temp_dir.name}: {e}")
     
     log(f"Sync complete: {uploaded} uploaded, {skipped} skipped, {failed} failed, {retried} retried, {filtered} filtered, {converted} converted")
 
