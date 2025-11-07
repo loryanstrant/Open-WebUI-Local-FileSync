@@ -17,6 +17,8 @@ A Docker container that periodically synchronizes files from a local mount with 
 - ✅ Upload processing verification with status tracking
 - 🔄 Automatic state backfilling from existing knowledge base files
 - 📝 Automatic state file initialization with permission validation
+- 🔐 **NEW:** SSH remote file ingestion with password and key authentication
+- 🛡️ **NEW:** SSH host key verification support for enhanced security
 
 ## Documentation
 
@@ -29,6 +31,8 @@ A Docker container that periodically synchronizes files from a local mount with 
 ## Quick Start
 
 > 💡 **For more detailed examples**, see [EXAMPLES.md](EXAMPLES.md) which includes complete docker-compose configurations for various use cases.
+> 
+> 📡 **For SSH remote file ingestion**, see [docker-compose-ssh-example.yml](docker-compose-ssh-example.yml) for a ready-to-use configuration.
 
 ### Using Docker Compose
 
