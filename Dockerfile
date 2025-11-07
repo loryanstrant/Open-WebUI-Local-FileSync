@@ -40,7 +40,8 @@ ENV TZ=UTC \
     RETRY_DELAY=60 \
     UPLOAD_TIMEOUT=300 \
     SSH_REMOTE_SOURCES= \
-    SSH_KEY_PATH=/app/ssh_keys
+    SSH_KEY_PATH=/app/ssh_keys \
+    SSH_STRICT_HOST_KEY_CHECKING=false
 
 # Volume for files to sync
 VOLUME ["/data"]

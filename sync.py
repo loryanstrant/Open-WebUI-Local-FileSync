@@ -47,6 +47,8 @@ UPLOAD_TIMEOUT = int(os.getenv('UPLOAD_TIMEOUT', '300'))  # seconds to wait for 
 # JSON array format: [{"host": "hostname", "port": 22, "username": "user", "password": "pass", "paths": ["/path1", "/path2"], "kb": "KB_Name"}, ...]
 SSH_REMOTE_SOURCES = os.getenv('SSH_REMOTE_SOURCES', '')
 SSH_KEY_PATH = os.getenv('SSH_KEY_PATH', '/app/ssh_keys')
+# If true, require known_hosts file and reject unknown hosts (more secure)
+SSH_STRICT_HOST_KEY_CHECKING = os.getenv('SSH_STRICT_HOST_KEY_CHECKING', 'false').lower() == 'true'
 
 def log(message):
     """Log with timestamp"""
@@ -165,12 +167,19 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
             log(f"Loading known_hosts from: {known_hosts_path}")
             ssh_client.load_host_keys(known_hosts_path)
             ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        elif SSH_STRICT_HOST_KEY_CHECKING:
+            # Strict mode: Fail if no known_hosts file
+            log(f"✗ ERROR: SSH_STRICT_HOST_KEY_CHECKING is enabled but no known_hosts file found at {known_hosts_path}")
+            log(f"✗ ERROR: Cannot connect to {host} without host key verification")
+            return False, [], kb_name
         else:
             # WARNING: AutoAddPolicy accepts any host key without verification
             # This is a security risk but often necessary for automation
+            # lgtm[py/paramiko-missing-host-key-validation]
             log(f"⚠ WARNING: No known_hosts file found at {known_hosts_path}")
             log(f"⚠ WARNING: Using AutoAddPolicy - host keys will not be verified")
             log(f"⚠ For better security, mount a known_hosts file to {known_hosts_path}")
+            log(f"⚠ Or set SSH_STRICT_HOST_KEY_CHECKING=true to enforce host key verification")
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
         # Connect with appropriate authentication method

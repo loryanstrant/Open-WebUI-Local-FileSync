@@ -239,6 +239,7 @@ Fetch files from remote servers via SSH and sync them to Open WebUI. This featur
 |----------|-------------|---------|
 | `SSH_REMOTE_SOURCES` | JSON array of SSH connection configurations (see below) | `""` (disabled) |
 | `SSH_KEY_PATH` | Directory containing SSH private keys for authentication | `/app/ssh_keys` |
+| `SSH_STRICT_HOST_KEY_CHECKING` | Enforce host key verification (requires known_hosts file) | `false` |
 
 **SSH_REMOTE_SOURCES Format:**
 
@@ -344,7 +345,24 @@ ssh-keyscan -H server.example.com >> ./ssh_keys/known_hosts
 cp ~/.ssh/known_hosts ./ssh_keys/known_hosts
 ```
 
-If no `known_hosts` file is found, the container will accept any host key (AutoAddPolicy). This is less secure but may be necessary for dynamic environments. A warning will be logged when this occurs.
+**Host Key Checking Modes:**
+
+1. **Default Mode** (`SSH_STRICT_HOST_KEY_CHECKING=false`):
+   - If `known_hosts` exists: Uses it for verification (secure)
+   - If `known_hosts` missing: Falls back to AutoAddPolicy with warnings
+   - Suitable for most use cases where convenience is needed
+
+2. **Strict Mode** (`SSH_STRICT_HOST_KEY_CHECKING=true`):
+   - **Requires** a `known_hosts` file
+   - Connections fail if host key cannot be verified
+   - Maximum security, recommended for production environments
+   - Example:
+   ```yaml
+   environment:
+     SSH_STRICT_HOST_KEY_CHECKING: "true"
+   volumes:
+     - ./ssh_keys:/app/ssh_keys:ro
+   ```
 
 **Notes:**
 - Files are downloaded to temporary directories and processed like local files
