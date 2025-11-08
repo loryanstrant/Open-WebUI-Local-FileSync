@@ -31,7 +31,7 @@ Then access `http://localhost:8000` to configure all settings!
 
 - 🖥️ **NEW:** Web-based configuration interface - no more complex environment variables!
 - 🌓 **NEW:** Light/Dark mode toggle for comfortable viewing
-- 📂 **NEW:** SSH filesystem browser for easy file selection
+- 📂 **NEW:** SSH filesystem browser with multiple file selection for easy file selection
 - 📊 **NEW:** Sync state management with visual status indicators
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly

@@ -79,27 +79,42 @@ The web interface now includes a theme toggle for comfortable viewing in any env
 
 ### SSH Filesystem Browser
 
-When configuring SSH remote sources, you can now browse the remote filesystem to select files and folders.
+When configuring SSH remote sources, you can now browse the remote filesystem to select files and folders with support for multiple selection.
 
 **SSH Source with Browse Button:**
 
 ![SSH Browse](https://github.com/user-attachments/assets/4bd02680-57c9-4195-8a0f-4fface55544f)
 
+**Multiple File Selection:**
+
+![Multiple Selection](https://github.com/user-attachments/assets/84919612-4caf-430b-abd5-226d1b404809)
+
+**Select All Feature:**
+
+![Select All](https://github.com/user-attachments/assets/c07a81b1-1f65-4ae6-8e62-3da318246393)
+
 **Features:**
 - Click "Browse Files" button on any SSH source
 - Interactive modal with directory navigation
+- **Multiple file selection with checkboxes** - select multiple files at once
+- **"Select All" and "Deselect All" buttons** - quickly select/deselect all items in current directory
+- **Visual feedback** - selected items highlighted in green
+- **Dynamic button text** - shows count of selected items (e.g., "Add Selected Paths (3)")
 - Breadcrumb navigation for easy path traversal
-- Click folders to navigate, click files to select
+- Click folders to navigate through directories
 - Selected paths automatically added to configuration
+- Prevents duplicate paths when adding multiple selections
 - Works with password and key-based authentication
 
 **How to use:**
 1. Add an SSH source or edit an existing one
 2. Fill in host, port, username, and authentication details
 3. Click "Browse Files" button
-4. Navigate the remote filesystem
-5. Click on a file or folder to select it
-6. Click "Add Selected Path" to add it to the paths list
+4. Navigate the remote filesystem using the breadcrumb or by clicking folders
+5. Select files/folders by checking their checkboxes
+   - Use "Select All" to select all items in the current directory
+   - Use "Deselect All" to clear all selections
+6. Click "Add Selected Path" (shows count) to add all selected paths to the configuration
 
 ### Sync State Management
 
