@@ -626,7 +626,9 @@ def save():
             return redirect(url_for('index', info='Failed to save configuration. Check permissions.'))
     
     except Exception as e:
-        return redirect(url_for('index', info=f'Error saving configuration: {str(e)}'))
+        # Log the error but don't expose details to user
+        print(f"Error saving configuration: {e}")
+        return redirect(url_for('index', info='Error saving configuration. Check logs for details.'))
 
 @app.route('/export_json')
 def export_json():
@@ -650,7 +652,9 @@ def update_config_api():
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
+        # Log the error but don't expose details to user
+        print(f"Error updating config: {e}")
+        return jsonify({'success': False, 'message': 'Error saving configuration'}), 400
 
 @app.route('/migrate')
 def migrate():
