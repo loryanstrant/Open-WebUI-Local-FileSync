@@ -487,7 +487,6 @@ HTML_TEMPLATE = """
         .file-item {
             padding: 10px;
             border-bottom: 1px solid var(--border-color-light);
-            cursor: pointer;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -501,6 +500,19 @@ HTML_TEMPLATE = """
         .file-item.selected {
             background: var(--accent-color);
             color: white;
+        }
+        
+        .file-item-checkbox {
+            cursor: pointer;
+            margin-right: 4px;
+        }
+        
+        .file-item-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            cursor: pointer;
         }
         
         .file-icon {
@@ -823,11 +835,15 @@ HTML_TEMPLATE = """
             <div class="breadcrumb" id="ssh-breadcrumb">
                 <span class="breadcrumb-item" onclick="navigateSSHPath('/')">Root</span>
             </div>
+            <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+                <button type="button" class="secondary" style="padding: 6px 12px; font-size: 12px;" onclick="selectAllInCurrentDirectory()">Select All</button>
+                <button type="button" class="secondary" style="padding: 6px 12px; font-size: 12px;" onclick="deselectAllSSH()">Deselect All</button>
+            </div>
             <div class="file-browser" id="file-browser">
                 <div class="loading">Connecting...</div>
             </div>
             <div class="button-group" style="margin-top: 15px;">
-                <button class="secondary" onclick="addSelectedPath()">Add Selected Path</button>
+                <button class="secondary" id="add-selected-path-btn" onclick="addSelectedPath()">Add Selected Path</button>
                 <button onclick="closeSSHBrowser()">Cancel</button>
             </div>
         </div>
@@ -1037,7 +1053,7 @@ HTML_TEMPLATE = """
         // SSH File Browser
         let currentSSHSource = null;
         let currentSSHPath = '/';
-        let selectedSSHPath = null;
+        let selectedSSHPaths = new Set();
         
         function browseSSH(button) {
             const sshItem = button.closest('.ssh-source-item');
@@ -1108,13 +1124,20 @@ HTML_TEMPLATE = """
             browser.innerHTML = items.map(item => {
                 const icon = item.is_dir ? '📁' : '📄';
                 const itemPath = path.endsWith('/') ? path + item.name : path + '/' + item.name;
-                const onclick = item.is_dir ? 
-                    `navigateSSHPath('${escapeHtml(itemPath)}')` : 
-                    `selectSSHItem('${escapeHtml(itemPath)}')`;
+                const isSelected = selectedSSHPaths.has(itemPath);
+                const selectedClass = isSelected ? 'selected' : '';
+                
                 return `
-                    <div class="file-item" onclick="${onclick}">
-                        <span class="file-icon">${icon}</span>
-                        <span>${escapeHtml(item.name)}</span>
+                    <div class="file-item ${selectedClass}">
+                        <input type="checkbox" 
+                               class="file-item-checkbox" 
+                               data-path="${escapeHtml(itemPath)}" 
+                               ${isSelected ? 'checked' : ''}
+                               onchange="toggleSSHItemSelection('${escapeHtml(itemPath)}', this.checked)">
+                        <div class="file-item-content" onclick="${item.is_dir ? `navigateSSHPath('${escapeHtml(itemPath)}')` : ''}">
+                            <span class="file-icon">${icon}</span>
+                            <span>${escapeHtml(item.name)}</span>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1137,26 +1160,77 @@ HTML_TEMPLATE = """
         
         function navigateSSHPath(path) {
             currentSSHPath = path;
-            selectedSSHPath = null;
             loadSSHDirectory(path);
         }
         
-        function selectSSHItem(path) {
-            selectedSSHPath = path;
-            // Highlight selected item
-            document.querySelectorAll('.file-item').forEach(item => {
-                item.classList.remove('selected');
+        function toggleSSHItemSelection(path, isChecked) {
+            if (isChecked) {
+                selectedSSHPaths.add(path);
+            } else {
+                selectedSSHPaths.delete(path);
+            }
+            updateSelectedPathsButton();
+            // Update visual state
+            const checkbox = document.querySelector(`input[data-path="${path}"]`);
+            if (checkbox) {
+                const fileItem = checkbox.closest('.file-item');
+                if (isChecked) {
+                    fileItem.classList.add('selected');
+                } else {
+                    fileItem.classList.remove('selected');
+                }
+            }
+        }
+        
+        function updateSelectedPathsButton() {
+            const button = document.querySelector('#add-selected-path-btn');
+            if (button) {
+                const count = selectedSSHPaths.size;
+                if (count > 0) {
+                    button.textContent = `Add Selected Path${count > 1 ? 's' : ''} (${count})`;
+                } else {
+                    button.textContent = 'Add Selected Path';
+                }
+            }
+        }
+        
+        function selectAllInCurrentDirectory() {
+            document.querySelectorAll('.file-item-checkbox').forEach(checkbox => {
+                const path = checkbox.getAttribute('data-path');
+                checkbox.checked = true;
+                selectedSSHPaths.add(path);
+                checkbox.closest('.file-item').classList.add('selected');
             });
-            event.currentTarget.classList.add('selected');
+            updateSelectedPathsButton();
+        }
+        
+        function deselectAllSSH() {
+            document.querySelectorAll('.file-item-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+                checkbox.closest('.file-item').classList.remove('selected');
+            });
+            selectedSSHPaths.clear();
+            updateSelectedPathsButton();
+        }
+        
+        function selectSSHItem(path) {
+            // This function is kept for backward compatibility but is no longer used
+            selectedSSHPaths.clear();
+            selectedSSHPaths.add(path);
+            updateSelectedPathsButton();
         }
         
         function addSelectedPath() {
-            if (!selectedSSHPath && currentSSHPath === '/') {
-                alert('Please select a file or directory');
+            if (selectedSSHPaths.size === 0 && currentSSHPath === '/') {
+                alert('Please select at least one file or directory');
                 return;
             }
             
-            const pathToAdd = selectedSSHPath || currentSSHPath;
+            // If nothing selected, add current directory
+            const pathsToAdd = selectedSSHPaths.size > 0 ? 
+                Array.from(selectedSSHPaths) : 
+                [currentSSHPath];
+            
             const pathsTextarea = currentSSHSource.sshItem.querySelector('textarea[name="ssh_paths[]"]');
             
             try {
@@ -1170,10 +1244,14 @@ HTML_TEMPLATE = """
                     paths = [];
                 }
                 
-                if (!paths.includes(pathToAdd)) {
-                    paths.push(pathToAdd);
-                    pathsTextarea.value = JSON.stringify(paths, null, 2);
-                }
+                // Add all selected paths, avoiding duplicates
+                pathsToAdd.forEach(pathToAdd => {
+                    if (!paths.includes(pathToAdd)) {
+                        paths.push(pathToAdd);
+                    }
+                });
+                
+                pathsTextarea.value = JSON.stringify(paths, null, 2);
                 
                 closeSSHBrowser();
             } catch (error) {
@@ -1185,7 +1263,7 @@ HTML_TEMPLATE = """
             document.getElementById('ssh-browser-modal').classList.remove('active');
             currentSSHSource = null;
             currentSSHPath = '/';
-            selectedSSHPath = null;
+            selectedSSHPaths.clear();
         }
         
         function addKBMapping() {
