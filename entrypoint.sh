@@ -52,6 +52,14 @@ chmod 0644 /etc/cron.d/filesync
 # Apply cron job
 crontab /etc/cron.d/filesync
 
+# Start web interface in background
+echo "Starting web interface on port ${WEB_PORT}..."
+/usr/local/bin/python3 /app/web.py >> /proc/1/fd/1 2>&1 &
+WEB_PID=$!
+
+# Give web server a moment to start
+sleep 2
+
 # Run initial sync
 echo "Running initial sync..."
 /usr/local/bin/python3 /app/sync.py

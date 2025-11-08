@@ -8,20 +8,22 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org requests pyyaml paramiko
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org requests pyyaml paramiko flask
 
 # Create app directory
 WORKDIR /app
 
 # Copy application files
 COPY sync.py /app/sync.py
+COPY config.py /app/config.py
+COPY web.py /app/web.py
 COPY entrypoint.sh /app/entrypoint.sh
 
 # Make scripts executable
-RUN chmod +x /app/sync.py /app/entrypoint.sh
+RUN chmod +x /app/sync.py /app/web.py /app/entrypoint.sh
 
 # Create data directory
-RUN mkdir -p /data /app/ssh_keys
+RUN mkdir -p /data /app/ssh_keys /app/config
 
 # Environment variables with defaults
 ENV TZ=UTC \
@@ -41,9 +43,15 @@ ENV TZ=UTC \
     UPLOAD_TIMEOUT=300 \
     SSH_REMOTE_SOURCES= \
     SSH_KEY_PATH=/app/ssh_keys \
-    SSH_STRICT_HOST_KEY_CHECKING=false
+    SSH_STRICT_HOST_KEY_CHECKING=false \
+    CONFIG_FILE=/app/config/filesync-config.json \
+    WEB_PORT=8000 \
+    WEB_HOST=0.0.0.0
 
 # Volume for files to sync
-VOLUME ["/data"]
+VOLUME ["/data", "/app/config"]
+
+# Expose web interface port
+EXPOSE 8000
 
 ENTRYPOINT ["/app/entrypoint.sh"]

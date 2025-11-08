@@ -38,6 +38,11 @@ sync_state.json
 # Local test files
 files/
 state/
+config/
+test_files/
+test_state/
+test_config/
+test_docker-compose.yml
 
 # OS
 .DS_Store
