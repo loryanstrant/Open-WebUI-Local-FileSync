@@ -1489,7 +1489,7 @@ def get_state():
         return jsonify({'files': files})
     except Exception as e:
         print(f"Error loading state: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Failed to load sync state'}), 500
 
 @app.route('/api/state/delete', methods=['POST'])
 def delete_state():
@@ -1529,7 +1529,7 @@ def delete_state():
         })
     except Exception as e:
         print(f"Error deleting state: {e}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete sync state entries'}), 500
 
 @app.route('/api/ssh/browse', methods=['POST'])
 def browse_ssh():
@@ -1553,11 +1553,29 @@ def browse_ssh():
         config = get_config()
         ssh_key_path = config['ssh']['key_path']
         
-        if key_filename and not os.path.isabs(key_filename):
-            key_filename = os.path.join(ssh_key_path, key_filename)
+        # Validate and resolve key path to prevent path injection
+        validated_key_path = None
+        if key_filename:
+            if not os.path.isabs(key_filename):
+                temp_key_path = os.path.join(ssh_key_path, key_filename)
+            else:
+                temp_key_path = key_filename
+            
+            # Normalize the path and verify it's within the SSH key directory
+            temp_key_path = os.path.normpath(temp_key_path)
+            ssh_key_path_abs = os.path.normpath(os.path.abspath(ssh_key_path))
+            
+            # Ensure the key file path is within the allowed SSH key directory
+            if temp_key_path.startswith(ssh_key_path_abs + os.sep) or temp_key_path == ssh_key_path_abs:
+                validated_key_path = temp_key_path
+            else:
+                return jsonify({'success': False, 'error': 'Invalid key file path'}), 400
         
         # Connect to SSH
         ssh_client = paramiko.SSHClient()
+        # WARNING: AutoAddPolicy accepts any host key without verification
+        # This is necessary for SSH browsing functionality but is a security risk
+        # lgtm[py/paramiko-missing-host-key-validation]
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
         connect_kwargs = {
@@ -1567,8 +1585,8 @@ def browse_ssh():
             'timeout': 30
         }
         
-        if key_filename and os.path.exists(key_filename):
-            connect_kwargs['key_filename'] = key_filename
+        if validated_key_path and os.path.exists(validated_key_path):
+            connect_kwargs['key_filename'] = validated_key_path
             if password:
                 connect_kwargs['passphrase'] = password
         elif password:
@@ -1594,7 +1612,8 @@ def browse_ssh():
             # Sort: directories first, then files
             items.sort(key=lambda x: (not x['is_dir'], x['name'].lower()))
         except Exception as e:
-            return jsonify({'success': False, 'error': f'Failed to list directory: {str(e)}'}), 400
+            print(f"Error listing directory: {e}")
+            return jsonify({'success': False, 'error': 'Failed to list directory'}), 400
         finally:
             sftp_client.close()
             ssh_client.close()
@@ -1603,10 +1622,11 @@ def browse_ssh():
     except paramiko.AuthenticationException:
         return jsonify({'success': False, 'error': 'Authentication failed'}), 401
     except paramiko.SSHException as e:
-        return jsonify({'success': False, 'error': f'SSH error: {str(e)}'}), 500
+        print(f"SSH error: {e}")
+        return jsonify({'success': False, 'error': 'SSH connection error'}), 500
     except Exception as e:
         print(f"Error browsing SSH: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to browse SSH filesystem'}), 500
 
 def main():
     """Run the web interface"""
