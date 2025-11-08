@@ -2,26 +2,48 @@
 
 A Docker container that periodically synchronizes files from a local mount with the Open WebUI knowledge base.
 
+## ✨ NEW: Web-Based Configuration Interface
+
+**No more messy docker-compose files!** Configure everything through an easy-to-use web interface.
+
+🌐 **[Web Interface Documentation](WEB_INTERFACE.md)** - Learn how to use the new configuration UI
+
+Quick setup:
+```yaml
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./files:/data:ro
+      - ./config:/app/config
+      - ./state:/app/state
+```
+Then access `http://localhost:8000` to configure all settings!
+
 ## Features
 
+- 🖥️ **NEW:** Web-based configuration interface - no more complex environment variables!
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support
 - 📁 Multiple file format support (markdown, text, PDF, Word docs, JSON, YAML)
-- 🔄 **NEW:** Automatic JSON/YAML to Markdown conversion
+- 🔄 Automatic JSON/YAML to Markdown conversion
 - 🔍 Smart sync: only uploads changed files
-- 🎯 **NEW:** Include/exclude filtering for files and folders per source
+- 🎯 Include/exclude filtering for files and folders per source
 - 🐳 Easy deployment with Docker
 - 📚 Knowledge base organization with directory mapping
 - 🔁 Automatic retry logic with configurable attempts and delays
 - ✅ Upload processing verification with status tracking
 - 🔄 Automatic state backfilling from existing knowledge base files
 - 📝 Automatic state file initialization with permission validation
-- 🔐 **NEW:** SSH remote file ingestion with password and key authentication
-- 🛡️ **NEW:** SSH host key verification support for enhanced security
+- 🔐 SSH remote file ingestion with password and key authentication
+- 🛡️ SSH host key verification support for enhanced security
 
 ## Documentation
 
+- 🌐 **[Web Interface Guide](WEB_INTERFACE.md)** - **NEW:** Learn how to use the web-based configuration
 - 📖 [Quick Start Guide](QUICKSTART.md) - Get started with knowledge bases and retry logic
 - 📚 [Examples](EXAMPLES.md) - Comprehensive examples for various deployment scenarios
 - 📋 [State File Format](STATE_FORMAT.md) - Advanced state file documentation
@@ -30,13 +52,48 @@ A Docker container that periodically synchronizes files from a local mount with 
 
 ## Quick Start
 
-> 💡 **For more detailed examples**, see [EXAMPLES.md](EXAMPLES.md) which includes complete docker-compose configurations for various use cases.
+> 💡 **Recommended:** Use the [Web Interface](WEB_INTERFACE.md) for the easiest configuration experience!
+> 
+> 📚 **For more examples**, see [EXAMPLES.md](EXAMPLES.md) which includes complete docker-compose configurations for various use cases.
 > 
 > 📡 **For SSH remote file ingestion**, see [docker-compose-ssh-example.yml](docker-compose-ssh-example.yml) for a ready-to-use configuration.
 
-### Using Docker Compose
+### Using Docker Compose with Web Interface (Recommended)
 
 1. Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  filesync:
+    image: ghcr.io/loryanstrant/open-webui-local-filesync:latest
+    container_name: openwebui-filesync
+    ports:
+      - "8000:8000"  # Web interface
+    volumes:
+      - ./your-files:/data:ro
+      - ./config:/app/config  # Persist configuration
+      - ./state:/app/state    # Persist state across restarts
+    restart: unless-stopped
+```
+
+2. Run the container:
+
+```bash
+docker-compose up -d
+```
+
+3. **Access the web interface** at `http://localhost:8000` and configure:
+   - Open WebUI connection (URL and API key)
+   - Sync schedule
+   - File settings
+   - Knowledge base mappings
+   - And more!
+
+### Using Docker Compose with Environment Variables (Legacy)
+
+You can still use environment variables for configuration:
 
 ```yaml
 version: '3.8'
@@ -53,14 +110,8 @@ services:
       SYNC_TIME: "02:00"
     volumes:
       - ./your-files:/data:ro
-      - ./filesync-state:/app/state  # Persist state across restarts
+      - ./state:/app/state
     restart: unless-stopped
-```
-
-2. Run the container:
-
-```bash
-docker-compose up -d
 ```
 
 ### Using Docker CLI
@@ -68,15 +119,15 @@ docker-compose up -d
 ```bash
 docker run -d \
   --name openwebui-filesync \
-  -e OPENWEBUI_URL=http://openwebui:8080 \
-  -e OPENWEBUI_API_KEY=your_api_key_here \
-  -e TZ=America/New_York \
-  -e SYNC_SCHEDULE=daily \
-  -e SYNC_TIME=02:00 \
+  -p 8000:8000 \
   -v /path/to/your/files:/data:ro \
+  -v /path/to/config:/app/config \
+  -v /path/to/state:/app/state \
   --restart unless-stopped \
   ghcr.io/loryanstrant/open-webui-local-filesync:latest
 ```
+
+Then configure via web interface at `http://localhost:8000`.
 
 ## Configuration
 
