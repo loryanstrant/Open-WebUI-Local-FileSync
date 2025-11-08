@@ -8,6 +8,11 @@ A Docker container that periodically synchronizes files from a local mount with 
 
 ![Web Interface](https://github.com/user-attachments/assets/16be0cc1-f778-4415-b52a-afa5adfa7c38)
 
+### Latest Updates
+- 🌓 **Light/Dark Mode**: Toggle between themes for comfortable viewing
+- 📂 **SSH Browser**: Browse remote filesystems to select files and folders
+- 📊 **State Management**: View and manage synced files with visual status indicators
+
 Quick setup:
 ```yaml
 services:
@@ -25,6 +30,9 @@ Then access `http://localhost:8000` to configure all settings!
 ## Features
 
 - 🖥️ **NEW:** Web-based configuration interface - no more complex environment variables!
+- 🌓 **NEW:** Light/Dark mode toggle for comfortable viewing
+- 📂 **NEW:** SSH filesystem browser for easy file selection
+- 📊 **NEW:** Sync state management with visual status indicators
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support
