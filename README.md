@@ -9,6 +9,10 @@ A Docker container that periodically synchronizes files from a local mount with 
 ![Web Interface](https://github.com/user-attachments/assets/16be0cc1-f778-4415-b52a-afa5adfa7c38)
 
 ### Latest Updates
+- 🔍 **Multi-Criteria Filtering**: Filter sync state by status AND knowledge base simultaneously
+- ⚡ **Shift-Select**: Select ranges of items with Shift+click for bulk operations
+- 📁 **File Management Tab**: Directly manage files in Open WebUI - view, filter, search, and delete files
+- 🔄 **Sync Integration**: File deletions automatically update sync state
 - 🌓 **Light/Dark Mode**: Toggle between themes for comfortable viewing
 - 📂 **SSH Browser**: Browse remote filesystems to select files and folders
 - 📊 **State Management**: View and manage synced files with visual status indicators
@@ -30,9 +34,13 @@ Then access `http://localhost:8000` to configure all settings!
 ## Features
 
 - 🖥️ **NEW:** Web-based configuration interface - no more complex environment variables!
+- 🔍 **NEW:** Multi-criteria filtering - filter by status AND knowledge base simultaneously
+- ⚡ **NEW:** Shift-select support - select ranges of items for bulk operations
+- 📁 **NEW:** File Management tab - directly manage Open WebUI files with filtering and bulk operations
+- 🔄 **NEW:** Sync state integration - file deletions automatically reflected in sync state
 - 🌓 **NEW:** Light/Dark mode toggle for comfortable viewing
 - 📂 **NEW:** SSH filesystem browser with multiple file selection for easy file selection
-- 📊 **NEW:** Sync state management with visual status indicators
+- 📊 **NEW:** Advanced sync state management with visual status indicators and filtering
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support

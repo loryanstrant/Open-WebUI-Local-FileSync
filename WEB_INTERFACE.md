@@ -13,7 +13,16 @@ The Open-WebUI-Local-FileSync now includes a web-based configuration interface t
 - **Visual Configuration Editor**: Easy-to-use web interface for all settings
 - **Light/Dark Mode Toggle**: Switch between themes for comfortable viewing in any environment
 - **SSH Filesystem Browser**: Browse and select files/folders from remote SSH servers
-- **Sync State Management**: View, search, and manage synced files with visual status indicators
+- **Advanced Sync State Management**: 
+  - Multi-criteria filtering (status and knowledge base)
+  - Shift-select for bulk operations
+  - Change knowledge base assignments
+  - Visual status indicators
+- **File Management**: Direct Open WebUI file operations
+  - View all files with KB associations
+  - Filter and search capabilities
+  - Bulk delete operations
+  - Automatic sync state integration
 - **Persistent Configuration**: Saves to a JSON file in the container's volume
 - **Live Updates**: Changes take effect on the next sync cycle
 - **Configuration Export**: Download your configuration as JSON
@@ -77,6 +86,19 @@ The web interface now includes a theme toggle for comfortable viewing in any env
 - Theme preference saved in browser localStorage
 - Automatically applies on page load
 
+### SSH Remote Sources
+
+SSH remote sources are now displayed in a collapsible format for a cleaner interface when multiple sources are configured.
+
+**Collapsed SSH Sources:**
+
+![SSH Sources Collapsed by Default](https://github.com/user-attachments/assets/0d555904-632e-422c-964f-40537c595a0e)
+
+**Features:**
+- SSH sources default to collapsed state for cleaner UI
+- Click the arrow to expand/collapse individual sources
+- All configuration fields remain accessible when expanded
+
 ### SSH Filesystem Browser
 
 When configuring SSH remote sources, you can now browse the remote filesystem to select files and folders with support for multiple selection.
@@ -118,11 +140,11 @@ When configuring SSH remote sources, you can now browse the remote filesystem to
 
 ### Sync State Management
 
-The new "Sync State" tab provides a comprehensive view of all synced files with management capabilities.
+The "Sync State" tab provides a comprehensive view of all synced files with advanced filtering and management capabilities.
 
-**Sync State Table:**
+**Sync State with Enhanced Filtering:**
 
-![Sync State Management](https://github.com/user-attachments/assets/b243a53a-9676-4ece-a669-fc2fcce5a948)
+![Sync State Management](https://github.com/user-attachments/assets/237f4224-a685-4302-9f38-d1ca5e5aac3d)
 
 **Features:**
 - Table view with file path, knowledge base, status, and timestamp
@@ -130,23 +152,76 @@ The new "Sync State" tab provides a comprehensive view of all synced files with 
   - 🟢 Green badge for "uploaded" files
   - 🔴 Red badge for "failed" files
   - 🔵 Blue badge for "processing" files
-- Search/filter by path or knowledge base name
+- **Advanced Filtering:**
+  - **Status filter dropdown**: Filter by status (All, Uploaded, Processing, Failed)
+  - **Knowledge Base filter dropdown**: Filter by specific KB or view all
+  - **Multiple filters**: Apply status and KB filters simultaneously with AND logic
+  - **Search by path**: Text search for file paths
+- **Shift-select support**: Click first checkbox, then Shift+click last checkbox to select range
 - Multi-select with checkboxes
 - Bulk operations:
   - Select All button
   - Deselect All button
   - Delete Selected (shows count)
+  - Change KB for multiple files
 - Individual delete buttons for each file
 - Refresh button to reload data
+
+**Multiple Filters in Action:**
+
+![Multiple Filters Applied](https://github.com/user-attachments/assets/488ce6be-8b1b-419c-989a-76270a9c0475)
 
 **How to use:**
 1. Click on the "Sync State" tab
 2. View all synced files in the table
-3. Use the search box to filter by path or knowledge base
-4. Select files using checkboxes
-5. Click "Delete Selected" to remove multiple files from sync state
-6. Or click individual "Delete" buttons for single files
-7. Click "Refresh" to reload the table
+3. Use the filter dropdowns to filter by status and/or knowledge base
+4. Use the search box to filter by file path
+5. Select files using checkboxes:
+   - Click individual checkboxes
+   - Use "Select All" to select all visible files
+   - Use Shift+click to select a range of files
+6. Click "Delete Selected" to remove multiple files from sync state
+7. Click "Change KB" to reassign files to a different knowledge base
+8. Or click individual "Delete" buttons for single files
+9. Click "Refresh" to reload the table
+
+### File Management
+
+The "File Management" tab allows you to directly manage files stored in Open WebUI, whether they were synced or uploaded manually.
+
+**File Management Interface:**
+
+This tab provides direct access to files in your Open WebUI instance, allowing you to manage the knowledge base without leaving the sync interface.
+
+**Features:**
+- **View all files**: Display all files from Open WebUI with their metadata
+- **Knowledge Base associations**: See which KB(s) each file belongs to
+- **Advanced filtering:**
+  - Filter by Knowledge Base (including "Unassigned" files)
+  - Search by filename
+- **File information**: View filename, associated KBs, file size, and creation date
+- **Shift-select support**: Select ranges of files using Shift+click
+- **Bulk operations:**
+  - Select All / Deselect All buttons
+  - Delete multiple files at once
+- **Individual file actions**: Delete button for each file
+- **Sync state integration**: When files are deleted, corresponding sync state entries are automatically removed
+
+**How to use:**
+1. Click on the "File Management" tab
+2. Browse all files currently in your Open WebUI instance
+3. Use the Knowledge Base filter to show files from specific KBs
+4. Use the search box to find files by name
+5. Select files using checkboxes:
+   - Click individual checkboxes
+   - Use "Select All" to select all visible files
+   - Use Shift+click to select a range of files
+6. Click "Delete Selected" to remove multiple files from Open WebUI
+7. Or click individual "Delete" buttons for single files
+8. Deleted files are automatically removed from sync state
+9. Click "Refresh" to reload the file list from Open WebUI
+
+**Note:** This feature requires a valid Open WebUI URL and API key to be configured in the Configuration tab.
 
 ## Configuration File
 
@@ -219,6 +294,12 @@ The web interface also provides REST API endpoints for programmatic configuratio
 ### Sync State Management
 - `GET /api/state` - Get all sync state entries with file details
 - `POST /api/state/delete` - Delete sync state entries (requires JSON body with `paths` array)
+- `POST /api/state/update_kb` - Update knowledge base for sync state entries (requires JSON body with `paths` array and `kb_name`)
+- `GET /api/knowledge_bases` - Get list of all knowledge bases from state and config
+
+### File Management (Open WebUI)
+- `GET /api/openwebui/files` - Get all files from Open WebUI with knowledge base associations
+- `POST /api/openwebui/files/delete` - Delete files from Open WebUI (requires JSON body with `file_ids` array)
 
 ### SSH Filesystem Browser
 - `POST /api/ssh/browse` - Browse remote SSH filesystem (requires SSH connection details and path)
@@ -252,6 +333,14 @@ curl -X POST http://localhost:8000/api/ssh/browse \
     "password": "pass",
     "path": "/home/user"
   }'
+
+# Get all files from Open WebUI
+curl http://localhost:8000/api/openwebui/files
+
+# Delete files from Open WebUI
+curl -X POST http://localhost:8000/api/openwebui/files/delete \
+  -H "Content-Type: application/json" \
+  -d '{"file_ids": ["file_id_1", "file_id_2"]}'
 ```
 
 ## Environment Variables (Web Interface)
