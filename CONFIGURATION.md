@@ -91,10 +91,10 @@ environment:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `FILES_DIR` | Directory inside container to sync from | `/data` |
-| `ALLOWED_EXTENSIONS` | Comma-separated list of file extensions to sync | `.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml` |
+| `ALLOWED_EXTENSIONS` | Comma-separated list of file extensions to sync | `.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf` |
 | `STATE_FILE` | Path to state file for tracking changes | `/app/sync_state.json` |
 
-**Note:** JSON and YAML files are automatically converted to Markdown format during upload for better readability in the knowledge base.
+**Note:** JSON, YAML, and CONF files are automatically converted to Markdown format during upload for better readability in the knowledge base. Configuration files (.conf) are wrapped in code blocks.
 
 ### Knowledge Base Configuration
 
@@ -226,9 +226,10 @@ environment:
 
 Fetch files from remote servers via SSH and sync them to Open WebUI. This feature allows you to:
 - Connect to multiple remote SSH servers
-- Specify multiple remote paths per server
+- Specify multiple remote paths per server (directories or specific files)
 - Use password or SSH key authentication
 - Map remote files to specific knowledge bases
+- Filter files using include/exclude patterns
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -246,8 +247,10 @@ Fetch files from remote servers via SSH and sync them to Open WebUI. This featur
     "username": "ssh_username",
     "password": "password_if_using_password_auth",
     "key_filename": "id_rsa",
-    "paths": ["/remote/path1", "/remote/path2"],
-    "kb": "Knowledge_Base_Name"
+    "paths": ["/remote/path1", "/remote/path2", "/etc/app/config.conf"],
+    "kb": "Knowledge_Base_Name",
+    "exclude": ["*.log", ".git/*", "*_backup*"],
+    "include": ["includes/*", "*.conf"]
   }
 ]
 ```
@@ -258,8 +261,10 @@ Fetch files from remote servers via SSH and sync them to Open WebUI. This featur
 - `username` (required): SSH username
 - `password` (optional): Password for password-based authentication
 - `key_filename` (optional): Filename of SSH private key (relative to `SSH_KEY_PATH` or absolute path)
-- `paths` (required): Array of remote file paths or directories to fetch
+- `paths` (required): Array of remote file paths (directories or specific files) to fetch
 - `kb` (optional): Knowledge base name for these files (uses default mapping if not specified)
+- `exclude` (optional): Array of patterns to exclude files/folders (glob patterns and substring matching supported)
+- `include` (optional): Array of patterns to include files (overrides exclusions)
 
 **Authentication Methods:**
 1. **Password Authentication**: Provide `password` field
@@ -298,7 +303,7 @@ volumes:
   - ./ssh_keys:/app/ssh_keys:ro
 ```
 
-**Example: Multiple SSH Sources**
+**Example: Multiple SSH Sources with Filtering**
 ```yaml
 environment:
   SSH_REMOTE_SOURCES: |
@@ -308,7 +313,8 @@ environment:
         "username": "developer",
         "password": "dev_pass",
         "paths": ["/opt/app/config"],
-        "kb": "Dev_Config"
+        "kb": "Dev_Config",
+        "exclude": ["*.log", "*_backup*"]
       },
       {
         "host": "prod-server.com",
@@ -316,6 +322,15 @@ environment:
         "key_filename": "prod_key",
         "paths": ["/etc/app/config", "/var/app/docs"],
         "kb": "Prod_Config"
+      },
+      {
+        "host": "homeassistant.local",
+        "username": "root",
+        "key_filename": "ha_key",
+        "paths": ["/etc/docker/HomeAssistant"],
+        "kb": "HomeAssistant",
+        "exclude": ["*/*"],
+        "include": ["includes/*", "*.conf", "*.yaml"]
       }
     ]
 volumes:
@@ -359,9 +374,25 @@ cp ~/.ssh/known_hosts ./ssh_keys/known_hosts
      - ./ssh_keys:/app/ssh_keys:ro
    ```
 
+**Filter Pattern Matching for SSH Sources:**
+
+SSH sources support include/exclude patterns to control which files are synced:
+
+- **Exclude patterns**: Files matching these patterns will be skipped
+- **Include patterns**: Files matching these patterns will be included even if they match an exclude pattern
+- **Pattern types**:
+  - Glob patterns: `*.log`, `*.conf`, `*/*` (all subdirectories), `.git/*`
+  - Substring matching: `_backup`, `_2025`, `.temp`
+- **Examples**:
+  - `["*.log"]` - Exclude all log files
+  - `["*/*"]` - Exclude all files in subdirectories (only sync root files)
+  - `["*/*"], ["includes/*", "*.conf"]` - Exclude all subdirectories except `includes/` and all .conf files
+  - `["*_backup*", "*.temp"]` - Exclude files with `_backup` in name and .temp files
+
 **Notes:**
 - Files are downloaded to temporary directories and processed like local files
 - SSH-fetched files respect `ALLOWED_EXTENSIONS` configuration
+- Filters are applied after download, filtered files are removed from temp directory
 - Temporary files are automatically cleaned up after sync
 - Each SSH source can target a different knowledge base
 - SSH connections timeout after 30 seconds

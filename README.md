@@ -28,10 +28,11 @@ Then access `http://localhost:8000` to configure all settings!
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support
-- 📁 Multiple file format support (markdown, text, PDF, Word docs, JSON, YAML)
-- 🔄 Automatic JSON/YAML to Markdown conversion
+- 📁 Multiple file format support (markdown, text, PDF, Word docs, JSON, YAML, configuration files)
+- 🔄 Automatic JSON/YAML/CONF to Markdown conversion
 - 🔍 Smart sync: only uploads changed files
-- 🎯 Include/exclude filtering for files and folders per source
+- 🎯 Include/exclude filtering for files and folders per source (volume mounts and SSH)
+- 📂 Support for exact file paths or directory filtering
 - 🐳 Easy deployment with Docker
 - 📚 Knowledge base organization with directory mapping
 - 🔁 Automatic retry logic with configurable attempts and delays
@@ -40,6 +41,7 @@ Then access `http://localhost:8000` to configure all settings!
 - 📝 Automatic state file initialization with permission validation
 - 🔐 SSH remote file ingestion with password and key authentication
 - 🛡️ SSH host key verification support for enhanced security
+- 🎛️ Fine-grained file filtering with glob patterns and substring matching
 
 ## 📚 Documentation
 
@@ -166,17 +168,18 @@ The sync script implements robust error handling:
 - **Retry Delay**: Configurable delay (default 60 seconds) between retry attempts
 - **State Persistence**: Upload status is saved between sync runs to handle failures gracefully
 
-### JSON and YAML File Conversion
+### Configuration File Conversion
 
-JSON and YAML files are automatically converted to Markdown format before upload:
+JSON, YAML, and CONF files are automatically converted to Markdown format before upload:
 
-- **Automatic Detection**: Files with `.json`, `.yaml`, or `.yml` extensions are automatically detected
+- **Automatic Detection**: Files with `.json`, `.yaml`, `.yml`, or `.conf` extensions are automatically detected
 - **Markdown Conversion**: Content is converted to a readable Markdown format with proper formatting
-- **Structured Display**: Nested objects and arrays are displayed with proper indentation
+- **Structured Display**: JSON/YAML nested objects and arrays are displayed with proper indentation
+- **Code Block Format**: Configuration files (.conf) are wrapped in code blocks for syntax highlighting
 - **Temporary Files**: Converted files are created temporarily, uploaded, and then cleaned up
 - **No Original File Changes**: Original files remain unchanged on your filesystem
 
-**Example Conversion:**
+**Example JSON/YAML Conversion:**
 
 A JSON file like this:
 ```json
@@ -199,6 +202,22 @@ Is converted to Markdown:
 - **settings:**
   - **enabled:** True
   - **timeout:** 30
+```
+
+**Example CONF File Conversion:**
+
+A configuration file like `app.conf` is converted to:
+```markdown
+# app.conf
+
+\`\`\`
+[database]
+host = localhost
+port = 5432
+
+[logging]
+level = INFO
+\`\`\`
 ```
 
 This makes configuration files much more readable in the Open WebUI knowledge base.
