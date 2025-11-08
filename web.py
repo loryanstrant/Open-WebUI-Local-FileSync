@@ -672,6 +672,7 @@ HTML_TEMPLATE = """
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('config')">Configuration</button>
             <button class="nav-tab" onclick="switchTab('state')">Sync State</button>
+            <button class="nav-tab" onclick="switchTab('files')">File Management</button>
         </div>
         
         <!-- Configuration Tab -->
@@ -835,11 +836,11 @@ HTML_TEMPLATE = """
                     <div class="ssh-source-item">
                         <div class="ssh-source-header" onclick="toggleSSHSource(this)">
                             <div class="ssh-source-title">
-                                <span class="ssh-source-toggle">▼</span>
+                                <span class="ssh-source-toggle collapsed">▼</span>
                                 <span>{{ source.name if source.name else (source.host + '@' + (source.username if source.username else 'unknown')) }}</span>
                             </div>
                         </div>
-                        <div class="ssh-source-content">
+                        <div class="ssh-source-content collapsed">
                             <input type="text" placeholder="Name/Description (e.g., Production Server)" name="ssh_name[]" value="{{ source.name | default('') }}">
                             <input type="text" placeholder="Host" name="ssh_host[]" value="{{ source.host }}">
                             <input type="number" placeholder="Port" name="ssh_port[]" value="{{ source.port | default(22) }}">
@@ -901,7 +902,16 @@ HTML_TEMPLATE = """
                 </p>
                 
                 <div class="state-controls">
-                    <input type="text" id="state-search" class="state-search" placeholder="Search by path, knowledge base, or status..." onkeyup="filterStateTable()">
+                    <input type="text" id="state-search" class="state-search" placeholder="Search by path..." onkeyup="filterStateTable()">
+                    <select id="status-filter" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);" onchange="filterStateTable()">
+                        <option value="">All Statuses</option>
+                        <option value="uploaded">Uploaded</option>
+                        <option value="processing">Processing</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                    <select id="kb-filter" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);" onchange="filterStateTable()">
+                        <option value="">All Knowledge Bases</option>
+                    </select>
                     <button onclick="selectAllState()">Select All</button>
                     <button onclick="deselectAllState()">Deselect All</button>
                     <select id="kb-select" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);">
@@ -927,6 +937,47 @@ HTML_TEMPLATE = """
                         <tbody id="state-table-body">
                             <tr>
                                 <td colspan="6" class="loading">Loading sync state...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- File Management Tab -->
+        <div id="files-tab" class="tab-content">
+            <div class="section">
+                <h2>File Management</h2>
+                <p class="help-text" style="margin-bottom: 15px;">
+                    Manage files and knowledge bases in Open WebUI. View, search, and delete files directly from the knowledge base.
+                </p>
+                
+                <div class="state-controls">
+                    <input type="text" id="files-search" class="state-search" placeholder="Search by filename..." onkeyup="filterFilesTable()">
+                    <select id="files-kb-filter" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);" onchange="filterFilesTable()">
+                        <option value="">All Knowledge Bases</option>
+                    </select>
+                    <button onclick="selectAllFiles()">Select All</button>
+                    <button onclick="deselectAllFiles()">Deselect All</button>
+                    <button class="danger" onclick="deleteSelectedFiles()" id="delete-files-btn" disabled>Delete Selected</button>
+                    <button class="secondary" onclick="refreshFilesTable()">Refresh</button>
+                </div>
+                
+                <div class="state-table-container">
+                    <table class="state-table" id="files-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all-files-checkbox" onchange="toggleSelectAllFiles()"></th>
+                                <th class="sortable" onclick="sortFilesTable('filename')">Filename</th>
+                                <th class="sortable" onclick="sortFilesTable('kb')">Knowledge Base</th>
+                                <th class="sortable" onclick="sortFilesTable('size')">Size</th>
+                                <th class="sortable" onclick="sortFilesTable('date')">Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="files-table-body">
+                            <tr>
+                                <td colspan="6" class="loading">Loading files...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1013,6 +1064,11 @@ HTML_TEMPLATE = """
             if (tabName === 'state') {
                 loadStateTable();
             }
+            
+            // Load files table if switching to files tab
+            if (tabName === 'files') {
+                loadFilesTable();
+            }
         }
         
         // Sync State Management
@@ -1045,21 +1101,30 @@ HTML_TEMPLATE = """
                 const response = await fetch('/api/knowledge_bases');
                 const data = await response.json();
                 const kbSelect = document.getElementById('kb-select');
+                const kbFilter = document.getElementById('kb-filter');
                 
                 // Clear existing options except the first one
                 kbSelect.innerHTML = '<option value="">Select KB...</option>';
+                kbFilter.innerHTML = '<option value="">All Knowledge Bases</option>';
                 
                 // Add knowledge bases
                 if (data.knowledge_bases && data.knowledge_bases.length > 0) {
                     data.knowledge_bases.forEach(kb => {
+                        // For kb-select (change KB dropdown)
                         const option = document.createElement('option');
                         option.value = kb;
                         option.textContent = kb;
                         kbSelect.appendChild(option);
+                        
+                        // For kb-filter (filter dropdown)
+                        const filterOption = document.createElement('option');
+                        filterOption.value = kb;
+                        filterOption.textContent = kb;
+                        kbFilter.appendChild(filterOption);
                     });
                 }
                 
-                // Add option to clear KB
+                // Add option to clear KB (only for kb-select)
                 const clearOption = document.createElement('option');
                 clearOption.value = '__clear__';
                 clearOption.textContent = '(Remove KB Assignment)';
@@ -1134,11 +1199,20 @@ HTML_TEMPLATE = """
         function renderStateTable() {
             const tbody = document.getElementById('state-table-body');
             const searchTerm = document.getElementById('state-search').value.toLowerCase();
+            const statusFilter = document.getElementById('status-filter').value;
+            const kbFilter = document.getElementById('kb-filter').value;
             
             const filteredData = stateData.filter(item => {
-                return item.path.toLowerCase().includes(searchTerm) || 
-                       (item.kb && item.kb.toLowerCase().includes(searchTerm)) ||
-                       item.status.toLowerCase().includes(searchTerm);
+                // Apply search filter
+                const matchesSearch = !searchTerm || item.path.toLowerCase().includes(searchTerm);
+                
+                // Apply status filter
+                const matchesStatus = !statusFilter || item.status === statusFilter;
+                
+                // Apply KB filter
+                const matchesKB = !kbFilter || item.kb === kbFilter;
+                
+                return matchesSearch && matchesStatus && matchesKB;
             });
             
             if (filteredData.length === 0) {
@@ -1148,7 +1222,7 @@ HTML_TEMPLATE = """
             
             tbody.innerHTML = filteredData.map(item => `
                 <tr>
-                    <td><input type="checkbox" class="state-checkbox" value="${escapeHtml(item.path)}" onchange="updateSelectedState()"></td>
+                    <td><input type="checkbox" class="state-checkbox" value="${escapeHtml(item.path)}" onclick="handleStateCheckboxClick(event, this)" onchange="updateSelectedState()"></td>
                     <td class="file-path">${escapeHtml(item.path)}</td>
                     <td class="kb-name">${item.kb ? escapeHtml(item.kb) : '-'}</td>
                     <td><span class="state-status ${item.status}">${item.status}</span></td>
@@ -1199,6 +1273,31 @@ HTML_TEMPLATE = """
                 selectedState.add(cb.value);
             });
             updateActionButtons();
+        }
+        
+        // Shift-select support for sync state
+        let lastCheckedState = null;
+        
+        function handleStateCheckboxClick(event, checkbox) {
+            if (!lastCheckedState) {
+                lastCheckedState = checkbox;
+                return;
+            }
+            
+            if (event.shiftKey) {
+                const checkboxes = Array.from(document.querySelectorAll('.state-checkbox'));
+                const start = checkboxes.indexOf(lastCheckedState);
+                const end = checkboxes.indexOf(checkbox);
+                const range = checkboxes.slice(Math.min(start, end), Math.max(start, end) + 1);
+                
+                range.forEach(cb => {
+                    cb.checked = checkbox.checked;
+                });
+                
+                updateSelectedState();
+            }
+            
+            lastCheckedState = checkbox;
         }
         
         function updateActionButtons() {
@@ -1304,6 +1403,279 @@ HTML_TEMPLATE = """
                 alert('Error deleting items: ' + error.message);
                 console.error('Error:', error);
             }
+        }
+        
+        // File Management (Open WebUI Files)
+        let filesData = [];
+        let selectedFiles = new Set();
+        let filesSortColumn = null;
+        let filesSortDirection = 'asc';
+        
+        async function loadFilesTable() {
+            const tbody = document.getElementById('files-table-body');
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading files from Open WebUI...</td></tr>';
+            
+            try {
+                const response = await fetch('/api/openwebui/files');
+                const data = await response.json();
+                
+                if (!data.success) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger-color);">${data.error || 'Error loading files'}</td></tr>`;
+                    return;
+                }
+                
+                filesData = data.files || [];
+                
+                // Load KB filter options
+                await loadFilesKnowledgeBases();
+                
+                renderFilesTable();
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--danger-color);">Error loading files</td></tr>';
+                console.error('Error loading files:', error);
+            }
+        }
+        
+        async function loadFilesKnowledgeBases() {
+            try {
+                const kbFilter = document.getElementById('files-kb-filter');
+                kbFilter.innerHTML = '<option value="">All Knowledge Bases</option>';
+                
+                // Get unique KB names from files
+                const kbSet = new Set();
+                filesData.forEach(file => {
+                    if (file.knowledge_bases && file.knowledge_bases.length > 0) {
+                        file.knowledge_bases.forEach(kb => kbSet.add(kb));
+                    }
+                });
+                
+                // Add to filter dropdown
+                Array.from(kbSet).sort().forEach(kb => {
+                    const option = document.createElement('option');
+                    option.value = kb;
+                    option.textContent = kb;
+                    kbFilter.appendChild(option);
+                });
+                
+                // Add "Unassigned" option
+                const unassignedOption = document.createElement('option');
+                unassignedOption.value = '__none__';
+                unassignedOption.textContent = '(Unassigned)';
+                kbFilter.appendChild(unassignedOption);
+            } catch (error) {
+                console.error('Error loading knowledge bases:', error);
+            }
+        }
+        
+        function renderFilesTable() {
+            const tbody = document.getElementById('files-table-body');
+            const searchTerm = document.getElementById('files-search').value.toLowerCase();
+            const kbFilter = document.getElementById('files-kb-filter').value;
+            
+            const filteredData = filesData.filter(item => {
+                // Apply search filter
+                const matchesSearch = !searchTerm || item.filename.toLowerCase().includes(searchTerm);
+                
+                // Apply KB filter
+                let matchesKB = true;
+                if (kbFilter) {
+                    if (kbFilter === '__none__') {
+                        matchesKB = !item.knowledge_bases || item.knowledge_bases.length === 0;
+                    } else {
+                        matchesKB = item.knowledge_bases && item.knowledge_bases.includes(kbFilter);
+                    }
+                }
+                
+                return matchesSearch && matchesKB;
+            });
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No files found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = filteredData.map(item => `
+                <tr>
+                    <td><input type="checkbox" class="files-checkbox" value="${escapeHtml(item.id)}" onclick="handleFilesCheckboxClick(event, this)" onchange="updateSelectedFiles()"></td>
+                    <td class="file-path">${escapeHtml(item.filename)}</td>
+                    <td class="kb-name">${item.knowledge_bases && item.knowledge_bases.length > 0 ? escapeHtml(item.knowledge_bases.join(', ')) : '-'}</td>
+                    <td>${formatFileSize(item.size)}</td>
+                    <td>${item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</td>
+                    <td><button class="danger" onclick="deleteFileItem('${escapeHtml(item.id)}', '${escapeHtml(item.filename)}')">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+        
+        // Shift-select support for files
+        let lastCheckedFile = null;
+        
+        function handleFilesCheckboxClick(event, checkbox) {
+            if (!lastCheckedFile) {
+                lastCheckedFile = checkbox;
+                return;
+            }
+            
+            if (event.shiftKey) {
+                const checkboxes = Array.from(document.querySelectorAll('.files-checkbox'));
+                const start = checkboxes.indexOf(lastCheckedFile);
+                const end = checkboxes.indexOf(checkbox);
+                const range = checkboxes.slice(Math.min(start, end), Math.max(start, end) + 1);
+                
+                range.forEach(cb => {
+                    cb.checked = checkbox.checked;
+                });
+                
+                updateSelectedFiles();
+            }
+            
+            lastCheckedFile = checkbox;
+        }
+        
+        function formatFileSize(bytes) {
+            if (!bytes || bytes === 0) return '-';
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        function filterFilesTable() {
+            renderFilesTable();
+        }
+        
+        function refreshFilesTable() {
+            selectedFiles.clear();
+            document.getElementById('select-all-files-checkbox').checked = false;
+            updateFilesActionButtons();
+            loadFilesTable();
+        }
+        
+        function toggleSelectAllFiles() {
+            const checked = document.getElementById('select-all-files-checkbox').checked;
+            document.querySelectorAll('.files-checkbox').forEach(cb => {
+                cb.checked = checked;
+            });
+            updateSelectedFiles();
+        }
+        
+        function selectAllFiles() {
+            document.getElementById('select-all-files-checkbox').checked = true;
+            toggleSelectAllFiles();
+        }
+        
+        function deselectAllFiles() {
+            document.getElementById('select-all-files-checkbox').checked = false;
+            toggleSelectAllFiles();
+        }
+        
+        function updateSelectedFiles() {
+            selectedFiles.clear();
+            document.querySelectorAll('.files-checkbox:checked').forEach(cb => {
+                selectedFiles.add(cb.value);
+            });
+            updateFilesActionButtons();
+        }
+        
+        function updateFilesActionButtons() {
+            const deleteBtn = document.getElementById('delete-files-btn');
+            const count = selectedFiles.size;
+            
+            deleteBtn.disabled = count === 0;
+            deleteBtn.textContent = `Delete Selected (${count})`;
+        }
+        
+        async function deleteFileItem(fileId, filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/openwebui/files/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({file_ids: [fileId]})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    refreshFilesTable();
+                    alert(`Successfully deleted file`);
+                } else {
+                    alert('Failed to delete file: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error deleting file: ' + error.message);
+                console.error('Error:', error);
+            }
+        }
+        
+        async function deleteSelectedFiles() {
+            if (selectedFiles.size === 0) return;
+            
+            if (!confirm(`Are you sure you want to delete ${selectedFiles.size} file(s)?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/openwebui/files/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({file_ids: Array.from(selectedFiles)})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    selectedFiles.clear();
+                    refreshFilesTable();
+                    alert(`Successfully deleted ${result.deleted_count} of ${result.total} file(s)`);
+                } else {
+                    alert('Failed to delete files: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error deleting files: ' + error.message);
+                console.error('Error:', error);
+            }
+        }
+        
+        function sortFilesTable(column) {
+            // Toggle sort direction if clicking same column
+            if (filesSortColumn === column) {
+                filesSortDirection = filesSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                filesSortColumn = column;
+                filesSortDirection = 'asc';
+            }
+            
+            // Sort data
+            filesData.sort((a, b) => {
+                let valA, valB;
+                
+                switch(column) {
+                    case 'filename':
+                        valA = a.filename.toLowerCase();
+                        valB = b.filename.toLowerCase();
+                        break;
+                    case 'kb':
+                        valA = (a.knowledge_bases && a.knowledge_bases.length > 0 ? a.knowledge_bases.join(',') : '').toLowerCase();
+                        valB = (b.knowledge_bases && b.knowledge_bases.length > 0 ? b.knowledge_bases.join(',') : '').toLowerCase();
+                        break;
+                    case 'size':
+                        valA = a.size || 0;
+                        valB = b.size || 0;
+                        break;
+                    case 'date':
+                        valA = a.created_at || '';
+                        valB = b.created_at || '';
+                        break;
+                    default:
+                        return 0;
+                }
+                
+                if (valA < valB) return filesSortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return filesSortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            renderFilesTable();
         }
         
         // SSH File Browser
@@ -2068,6 +2440,131 @@ def browse_ssh():
     except Exception as e:
         print(f"Error browsing SSH: {e}")
         return jsonify({'success': False, 'error': 'Failed to browse SSH filesystem'}), 500
+
+@app.route('/api/openwebui/files', methods=['GET'])
+def get_openwebui_files():
+    """API endpoint to get all files from Open WebUI"""
+    try:
+        import requests
+        
+        config = get_config()
+        openwebui_url = config['openwebui']['url']
+        api_key = config['openwebui']['api_key']
+        
+        if not openwebui_url or not api_key:
+            return jsonify({'success': False, 'error': 'Open WebUI URL and API key required'}), 400
+        
+        # Get all files from Open WebUI
+        headers = {'Authorization': f'Bearer {api_key}'}
+        response = requests.get(f'{openwebui_url}/api/v1/files/', headers=headers)
+        
+        if response.status_code != 200:
+            return jsonify({'success': False, 'error': f'Failed to fetch files: {response.status_code}'}), 500
+        
+        files_data = response.json()
+        
+        # Get knowledge bases to map file IDs to KB names
+        kb_response = requests.get(f'{openwebui_url}/api/v1/knowledge/', headers=headers)
+        kb_mapping = {}
+        
+        if kb_response.status_code == 200:
+            kb_data = kb_response.json()
+            # Create mapping of file_id to knowledge base name
+            for kb in kb_data:
+                kb_name = kb.get('name', '')
+                for file_id in kb.get('file_ids', []):
+                    if file_id not in kb_mapping:
+                        kb_mapping[file_id] = []
+                    kb_mapping[file_id].append(kb_name)
+        
+        # Enhance files data with KB information
+        enhanced_files = []
+        for file_item in files_data:
+            file_id = file_item.get('id', '')
+            enhanced_files.append({
+                'id': file_id,
+                'filename': file_item.get('filename', file_item.get('meta', {}).get('name', 'Unknown')),
+                'size': file_item.get('meta', {}).get('size', 0),
+                'created_at': file_item.get('created_at', ''),
+                'knowledge_bases': kb_mapping.get(file_id, [])
+            })
+        
+        return jsonify({'success': True, 'files': enhanced_files})
+    except Exception as e:
+        print(f"Error getting Open WebUI files: {e}")
+        return jsonify({'success': False, 'error': 'Failed to fetch files from Open WebUI'}), 500
+
+@app.route('/api/openwebui/files/delete', methods=['POST'])
+def delete_openwebui_files():
+    """API endpoint to delete files from Open WebUI"""
+    try:
+        import requests
+        
+        data = request.get_json()
+        file_ids = data.get('file_ids', [])
+        
+        if not file_ids:
+            return jsonify({'success': False, 'message': 'No file IDs provided'}), 400
+        
+        config = get_config()
+        openwebui_url = config['openwebui']['url']
+        api_key = config['openwebui']['api_key']
+        
+        if not openwebui_url or not api_key:
+            return jsonify({'success': False, 'error': 'Open WebUI URL and API key required'}), 400
+        
+        headers = {'Authorization': f'Bearer {api_key}'}
+        deleted_count = 0
+        errors = []
+        
+        for file_id in file_ids:
+            try:
+                response = requests.delete(f'{openwebui_url}/api/v1/files/{file_id}', headers=headers)
+                if response.status_code in [200, 204]:
+                    deleted_count += 1
+                    # Update sync state to mark as deleted
+                    update_sync_state_on_delete(file_id)
+                else:
+                    errors.append(f'File {file_id}: {response.status_code}')
+            except Exception as e:
+                errors.append(f'File {file_id}: Error deleting file')
+        
+        return jsonify({
+            'success': True,
+            'deleted_count': deleted_count,
+            'total': len(file_ids),
+            'errors': errors
+        })
+    except Exception as e:
+        print(f"Error deleting Open WebUI files: {e}")
+        return jsonify({'success': False, 'error': 'Failed to delete files'}), 500
+
+def update_sync_state_on_delete(file_id):
+    """Update sync state when a file is deleted from Open WebUI"""
+    try:
+        config = get_config()
+        state_file = config['files']['state_file']
+        
+        if not os.path.exists(state_file):
+            return
+        
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+        
+        # Find and remove entries with matching file_id
+        files_to_remove = []
+        for path, info in state.get('files', {}).items():
+            if info.get('file_id') == file_id:
+                files_to_remove.append(path)
+        
+        for path in files_to_remove:
+            del state['files'][path]
+        
+        # Save updated state
+        with open(state_file, 'w') as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"Error updating sync state on delete: {e}")
 
 def main():
     """Run the web interface"""
