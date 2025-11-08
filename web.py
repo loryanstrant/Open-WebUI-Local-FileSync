@@ -284,7 +284,7 @@ HTML_TEMPLATE = """
                     <label for="files_allowed_extensions">Allowed Extensions:</label>
                     <input type="text" id="files_allowed_extensions" name="files_allowed_extensions" 
                            value="{{ ','.join(config.files.allowed_extensions) }}">
-                    <div class="help-text">Comma-separated list (e.g., .md,.txt,.pdf,.doc,.docx)</div>
+                    <div class="help-text">Comma-separated list (e.g., .md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf)</div>
                 </div>
                 <div class="form-group">
                     <label for="files_state_file">State File Path:</label>
@@ -296,6 +296,7 @@ HTML_TEMPLATE = """
             <!-- Knowledge Base Settings -->
             <div class="section">
                 <h2>Knowledge Base Configuration</h2>
+                <div class="help-text" style="margin-bottom: 15px;">Use exclude/include patterns to filter which files are synced. Patterns support wildcards (* and ?) and substring matching.</div>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="kb_single_mode" name="kb_single_mode" 
@@ -313,11 +314,11 @@ HTML_TEMPLATE = """
                     <div id="kb_mappings_container">
                         {% for mapping in config.knowledge_bases.mappings %}
                         <div class="mapping-item">
-                            <input type="text" placeholder="Path" name="kb_mapping_path[]" value="{{ mapping.path }}">
+                            <input type="text" placeholder="Path (can be a directory or specific file)" name="kb_mapping_path[]" value="{{ mapping.path }}">
                             <input type="text" placeholder="KB Name" name="kb_mapping_kb[]" value="{{ mapping.kb }}">
-                            <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*"])' 
+                            <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' 
                                       name="kb_mapping_exclude[]">{{ mapping.exclude | tojson if mapping.exclude else '' }}</textarea>
-                            <textarea placeholder='Include patterns (JSON array, e.g., ["includes/*"])' 
+                            <textarea placeholder='Include patterns (JSON array, e.g., ["includes/*", "config.conf"])' 
                                       name="kb_mapping_include[]">{{ mapping.include | tojson if mapping.include else '' }}</textarea>
                             <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
                         </div>
@@ -331,6 +332,7 @@ HTML_TEMPLATE = """
             <div class="section">
                 <h2>Volume Mounts (Documentation Only)</h2>
                 <p class="help-text">Note: These are for reference only. Actual volume mounts must be configured in docker-compose.yml</p>
+                <p class="help-text">To filter which files are synced from volumes, use the Knowledge Base Configuration section below with include/exclude patterns.</p>
                 <div id="volumes_container">
                     {% for volume in config.volumes %}
                     <div class="volume-item">
@@ -350,6 +352,7 @@ HTML_TEMPLATE = """
             <!-- SSH Settings -->
             <div class="section">
                 <h2>SSH Remote Sources</h2>
+                <div class="help-text" style="margin-bottom: 15px;">Fetch files from remote servers. Paths can be directories or specific files. Use exclude/include patterns to filter files.</div>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="ssh_enabled" name="ssh_enabled" 
@@ -377,9 +380,13 @@ HTML_TEMPLATE = """
                         <input type="text" placeholder="Username" name="ssh_username[]" value="{{ source.username }}">
                         <input type="text" placeholder="Password (optional)" name="ssh_password[]" value="{{ source.password | default('') }}">
                         <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]" value="{{ source.key_filename | default('') }}">
-                        <textarea placeholder='Remote Paths (JSON array, e.g., ["/path1", "/path2"])' 
+                        <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' 
                                   name="ssh_paths[]">{{ source.paths | tojson }}</textarea>
                         <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]" value="{{ source.kb | default('') }}">
+                        <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' 
+                                  name="ssh_exclude[]">{{ source.exclude | tojson if source.exclude else '' }}</textarea>
+                        <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' 
+                                  name="ssh_include[]">{{ source.include | tojson if source.include else '' }}</textarea>
                         <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
                     </div>
                     {% endfor %}
@@ -422,10 +429,10 @@ HTML_TEMPLATE = """
             const item = document.createElement('div');
             item.className = 'mapping-item';
             item.innerHTML = `
-                <input type="text" placeholder="Path" name="kb_mapping_path[]">
+                <input type="text" placeholder="Path (can be a directory or specific file)" name="kb_mapping_path[]">
                 <input type="text" placeholder="KB Name" name="kb_mapping_kb[]">
-                <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*"])' name="kb_mapping_exclude[]"></textarea>
-                <textarea placeholder='Include patterns (JSON array, e.g., ["includes/*"])' name="kb_mapping_include[]"></textarea>
+                <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' name="kb_mapping_exclude[]"></textarea>
+                <textarea placeholder='Include patterns (JSON array, e.g., ["includes/*", "config.conf"])' name="kb_mapping_include[]"></textarea>
                 <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
             `;
             container.appendChild(item);
@@ -457,8 +464,10 @@ HTML_TEMPLATE = """
                 <input type="text" placeholder="Username" name="ssh_username[]">
                 <input type="text" placeholder="Password (optional)" name="ssh_password[]">
                 <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]">
-                <textarea placeholder='Remote Paths (JSON array, e.g., ["/path1", "/path2"])' name="ssh_paths[]"></textarea>
+                <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' name="ssh_paths[]"></textarea>
                 <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]">
+                <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' name="ssh_exclude[]"></textarea>
+                <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' name="ssh_include[]"></textarea>
                 <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
             `;
             container.appendChild(item);
@@ -587,6 +596,8 @@ def save():
         ssh_key_filenames = request.form.getlist('ssh_key_filename[]')
         ssh_paths_list = request.form.getlist('ssh_paths[]')
         ssh_kbs = request.form.getlist('ssh_kb[]')
+        ssh_excludes = request.form.getlist('ssh_exclude[]')
+        ssh_includes = request.form.getlist('ssh_include[]')
         
         for i, host in enumerate(ssh_hosts):
             if host and i < len(ssh_usernames) and ssh_usernames[i]:
@@ -616,6 +627,24 @@ def save():
                 
                 if i < len(ssh_kbs) and ssh_kbs[i]:
                     source['kb'] = ssh_kbs[i]
+                
+                # Parse exclude patterns
+                if i < len(ssh_excludes) and ssh_excludes[i]:
+                    try:
+                        exclude = json.loads(ssh_excludes[i])
+                        if isinstance(exclude, list):
+                            source['exclude'] = exclude
+                    except:
+                        pass
+                
+                # Parse include patterns
+                if i < len(ssh_includes) and ssh_includes[i]:
+                    try:
+                        include = json.loads(ssh_includes[i])
+                        if isinstance(include, list):
+                            source['include'] = include
+                    except:
+                        pass
                 
                 config['ssh']['sources'].append(source)
         

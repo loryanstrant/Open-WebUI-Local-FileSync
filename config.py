@@ -25,7 +25,7 @@ def get_default_config():
         },
         'files': {
             'directory': '/data',
-            'allowed_extensions': ['.md', '.txt', '.pdf', '.doc', '.docx', '.json', '.yaml', '.yml'],
+            'allowed_extensions': ['.md', '.txt', '.pdf', '.doc', '.docx', '.json', '.yaml', '.yml', '.conf'],
             'state_file': '/app/sync_state.json'
         },
         'knowledge_bases': {
@@ -122,7 +122,7 @@ def load_config_from_env():
     
     # File settings
     config['files']['directory'] = os.getenv('FILES_DIR', '/data')
-    allowed_ext = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml')
+    allowed_ext = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf')
     config['files']['allowed_extensions'] = [ext.strip() for ext in allowed_ext.split(',')]
     config['files']['state_file'] = os.getenv('STATE_FILE', '/app/sync_state.json')
     
