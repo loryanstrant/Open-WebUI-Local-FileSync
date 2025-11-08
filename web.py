@@ -284,7 +284,7 @@ HTML_TEMPLATE = """
                     <label for="files_allowed_extensions">Allowed Extensions:</label>
                     <input type="text" id="files_allowed_extensions" name="files_allowed_extensions" 
                            value="{{ ','.join(config.files.allowed_extensions) }}">
-                    <div class="help-text">Comma-separated list (e.g., .md,.txt,.pdf,.doc,.docx)</div>
+                    <div class="help-text">Comma-separated list (e.g., .md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf)</div>
                 </div>
                 <div class="form-group">
                     <label for="files_state_file">State File Path:</label>
@@ -380,6 +380,10 @@ HTML_TEMPLATE = """
                         <textarea placeholder='Remote Paths (JSON array, e.g., ["/path1", "/path2"])' 
                                   name="ssh_paths[]">{{ source.paths | tojson }}</textarea>
                         <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]" value="{{ source.kb | default('') }}">
+                        <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*"])' 
+                                  name="ssh_exclude[]">{{ source.exclude | tojson if source.exclude else '' }}</textarea>
+                        <textarea placeholder='Include patterns (JSON array, e.g., ["includes/*"])' 
+                                  name="ssh_include[]">{{ source.include | tojson if source.include else '' }}</textarea>
                         <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
                     </div>
                     {% endfor %}
@@ -459,6 +463,8 @@ HTML_TEMPLATE = """
                 <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]">
                 <textarea placeholder='Remote Paths (JSON array, e.g., ["/path1", "/path2"])' name="ssh_paths[]"></textarea>
                 <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]">
+                <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*"])' name="ssh_exclude[]"></textarea>
+                <textarea placeholder='Include patterns (JSON array, e.g., ["includes/*"])' name="ssh_include[]"></textarea>
                 <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
             `;
             container.appendChild(item);
@@ -587,6 +593,8 @@ def save():
         ssh_key_filenames = request.form.getlist('ssh_key_filename[]')
         ssh_paths_list = request.form.getlist('ssh_paths[]')
         ssh_kbs = request.form.getlist('ssh_kb[]')
+        ssh_excludes = request.form.getlist('ssh_exclude[]')
+        ssh_includes = request.form.getlist('ssh_include[]')
         
         for i, host in enumerate(ssh_hosts):
             if host and i < len(ssh_usernames) and ssh_usernames[i]:
@@ -616,6 +624,24 @@ def save():
                 
                 if i < len(ssh_kbs) and ssh_kbs[i]:
                     source['kb'] = ssh_kbs[i]
+                
+                # Parse exclude patterns
+                if i < len(ssh_excludes) and ssh_excludes[i]:
+                    try:
+                        exclude = json.loads(ssh_excludes[i])
+                        if isinstance(exclude, list):
+                            source['exclude'] = exclude
+                    except:
+                        pass
+                
+                # Parse include patterns
+                if i < len(ssh_includes) and ssh_includes[i]:
+                    try:
+                        include = json.loads(ssh_includes[i])
+                        if isinstance(include, list):
+                            source['include'] = include
+                    except:
+                        pass
                 
                 config['ssh']['sources'].append(source)
         

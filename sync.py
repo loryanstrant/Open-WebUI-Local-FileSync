@@ -53,7 +53,7 @@ else:
     OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
     OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
     FILES_DIR = os.getenv('FILES_DIR', '/data')
-    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml').split(',')
+    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf').split(',')
     STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
     KNOWLEDGE_BASE_MAPPING = os.getenv('KNOWLEDGE_BASE_MAPPING', '')
     KNOWLEDGE_BASE_NAME = os.getenv('KNOWLEDGE_BASE_NAME', '')
@@ -148,7 +148,7 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
     """Fetch files from a remote SSH server
     
     Args:
-        ssh_source: Dict with SSH connection details (host, port, username, password/key_filename, paths, kb)
+        ssh_source: Dict with SSH connection details (host, port, username, password/key_filename, paths, kb, exclude, include)
         temp_dir: Path object pointing to temporary directory for downloaded files
     
     Returns:
@@ -165,6 +165,13 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
     key_filename = ssh_source.get('key_filename')
     remote_paths = ssh_source['paths']
     kb_name = ssh_source.get('kb')
+    
+    # Extract filter patterns
+    ssh_filters = {}
+    if 'exclude' in ssh_source and isinstance(ssh_source['exclude'], list):
+        ssh_filters['exclude'] = ssh_source['exclude']
+    if 'include' in ssh_source and isinstance(ssh_source['include'], list):
+        ssh_filters['include'] = ssh_source['include']
     
     log(f"Connecting to SSH server: {username}@{host}:{port}")
     
@@ -243,12 +250,32 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
                     # It's a file - download it directly
                     downloaded = _download_ssh_file(sftp_client, remote_path, temp_dir, host)
                     if downloaded:
-                        downloaded_files.extend(downloaded)
+                        # Apply filters to downloaded file
+                        for file_path in downloaded:
+                            if should_process_file(file_path, ssh_filters, temp_dir):
+                                downloaded_files.append(file_path)
+                            else:
+                                log(f"  ⊗ Filtered by SSH source rules: {file_path.name}")
+                                # Remove filtered file
+                                try:
+                                    file_path.unlink()
+                                except:
+                                    pass
                 elif stat_module.S_ISDIR(remote_stat.st_mode):
                     # It's a directory - recursively download files
                     downloaded = _download_ssh_directory(sftp_client, remote_path, temp_dir, host)
                     if downloaded:
-                        downloaded_files.extend(downloaded)
+                        # Apply filters to downloaded files
+                        for file_path in downloaded:
+                            if should_process_file(file_path, ssh_filters, temp_dir):
+                                downloaded_files.append(file_path)
+                            else:
+                                log(f"  ⊗ Filtered by SSH source rules: {file_path.name}")
+                                # Remove filtered file
+                                try:
+                                    file_path.unlink()
+                                except:
+                                    pass
                 else:
                     log(f"⚠ Remote path is neither file nor directory: {remote_path}")
             
@@ -413,6 +440,21 @@ def convert_yaml_to_markdown(yaml_data, filename):
     # YAML and JSON have similar structures, reuse the JSON converter
     return convert_json_to_markdown(yaml_data, filename)
 
+def convert_conf_to_markdown(conf_content, filename):
+    """Convert configuration file content to formatted Markdown
+    
+    Args:
+        conf_content: Raw configuration file content as string
+        filename: Original filename for title
+    
+    Returns:
+        Markdown formatted string
+    """
+    lines = [f"# {filename}\n\n```"]
+    lines.append(conf_content)
+    lines.append("```")
+    return "\n".join(lines)
+
 def should_process_file(filepath, filters, mapped_path=None):
     """Check if a file should be processed based on include/exclude filters
     
@@ -480,7 +522,7 @@ def should_process_file(filepath, filters, mapped_path=None):
     return True
 
 def convert_file_to_markdown(filepath):
-    """Convert JSON/YAML files to Markdown format
+    """Convert JSON/YAML/CONF files to Markdown format
     
     Args:
         filepath: Path to the file
@@ -493,8 +535,8 @@ def convert_file_to_markdown(filepath):
     """
     ext = filepath.suffix.lower()
     
-    # Only convert JSON and YAML files
-    if ext not in ['.json', '.yaml', '.yml']:
+    # Only convert JSON, YAML, and CONF files
+    if ext not in ['.json', '.yaml', '.yml', '.conf']:
         return True, filepath, False
     
     try:
@@ -519,6 +561,9 @@ def convert_file_to_markdown(filepath):
             except yaml.YAMLError as e:
                 log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
                 return False, None, False
+        elif ext == '.conf':
+            # Convert .conf files as plain text with formatting
+            markdown_content = convert_conf_to_markdown(content, filepath.name)
         
         # Create temporary markdown file
         temp_fd, temp_path = tempfile.mkstemp(suffix='.md', prefix=f"{filepath.stem}_")
