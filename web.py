@@ -2492,7 +2492,7 @@ def get_openwebui_files():
         return jsonify({'success': True, 'files': enhanced_files})
     except Exception as e:
         print(f"Error getting Open WebUI files: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to fetch files from Open WebUI'}), 500
 
 @app.route('/api/openwebui/files/delete', methods=['POST'])
 def delete_openwebui_files():
@@ -2527,7 +2527,7 @@ def delete_openwebui_files():
                 else:
                     errors.append(f'File {file_id}: {response.status_code}')
             except Exception as e:
-                errors.append(f'File {file_id}: {str(e)}')
+                errors.append(f'File {file_id}: Error deleting file')
         
         return jsonify({
             'success': True,
@@ -2537,7 +2537,7 @@ def delete_openwebui_files():
         })
     except Exception as e:
         print(f"Error deleting Open WebUI files: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to delete files'}), 500
 
 def update_sync_state_on_delete(file_id):
     """Update sync state when a file is deleted from Open WebUI"""
