@@ -556,11 +556,19 @@ def convert_file_to_markdown(filepath):
                 log(f"⚠ PyYAML not installed, cannot convert {filepath.name}")
                 return True, filepath, False
             try:
+                # Try to parse YAML with safe_load first
                 data = yaml.safe_load(content)
                 markdown_content = convert_yaml_to_markdown(data, filepath.name)
             except yaml.YAMLError as e:
-                log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
-                return False, None, False
+                # If safe_load fails due to custom tags like !include, treat as plain text
+                error_msg = str(e)
+                if 'could not determine a constructor for the tag' in error_msg or '!include' in error_msg:
+                    log(f"⚠ YAML file {filepath.name} contains custom tags, converting as plain text")
+                    # Convert as plain text with code block formatting
+                    markdown_content = convert_conf_to_markdown(content, filepath.name)
+                else:
+                    log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
+                    return False, None, False
         elif ext == '.conf':
             # Convert .conf files as plain text with formatting
             markdown_content = convert_conf_to_markdown(content, filepath.name)
@@ -910,7 +918,7 @@ def upload_file_to_openwebui(filepath, file_hash, kb_id=None):
     Args:
         filepath: Path to the file to upload
         file_hash: MD5 hash of the file
-        kb_id: Optional knowledge base ID to associate file with
+        kb_id: Optional knowledge base ID to associate file with (not used during upload)
     
     Returns:
         Tuple of (success: bool, file_id: str or None)
@@ -927,17 +935,14 @@ def upload_file_to_openwebui(filepath, file_hash, kb_id=None):
                 'file': (filepath.name, f, 'application/octet-stream')
             }
             
-            # Add knowledge base ID if provided
-            data = {}
-            if kb_id:
-                data['knowledge_base_id'] = kb_id
-            
-            response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
+            # Note: knowledge_base_id is not passed during upload
+            # Files must be added to knowledge base after upload using add_file_to_knowledge_base()
+            response = requests.post(url, headers=headers, files=files, timeout=30)
             
             if response.status_code in [200, 201]:
                 result = response.json()
                 file_id = result.get('id')
-                log(f"✓ Uploaded: {filepath.name}" + (f" to KB ID: {kb_id}" if kb_id else ""))
+                log(f"✓ Uploaded: {filepath.name}")
                 return True, file_id
             else:
                 log(f"✗ Failed to upload {filepath.name}: {response.status_code} - {response.text}")

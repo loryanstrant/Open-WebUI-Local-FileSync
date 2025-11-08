@@ -299,6 +299,53 @@ HTML_TEMPLATE = """
             transition: background-color 0.3s, border-color 0.3s;
         }
         
+        .ssh-source-item {
+            border-left: 3px solid var(--secondary-color);
+        }
+        
+        .ssh-source-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 5px;
+            margin: -10px -10px 10px -10px;
+            border-radius: 4px;
+        }
+        
+        .ssh-source-header:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .ssh-source-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .ssh-source-toggle {
+            font-size: 18px;
+            transition: transform 0.3s;
+        }
+        
+        .ssh-source-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        .ssh-source-content {
+            max-height: 2000px;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            opacity: 1;
+        }
+        
+        .ssh-source-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+        
         .mapping-item button,
         .ssh-source-item button,
         .volume-item button {
@@ -361,6 +408,7 @@ HTML_TEMPLATE = """
             width: 100%;
             border-collapse: collapse;
             background: var(--bg-secondary);
+            table-layout: auto;
         }
         
         .state-table th,
@@ -368,6 +416,9 @@ HTML_TEMPLATE = """
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .state-table th {
@@ -376,10 +427,56 @@ HTML_TEMPLATE = """
             color: var(--text-primary);
             position: sticky;
             top: 0;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .state-table th:hover {
+            background: var(--border-color);
+        }
+        
+        .state-table th.sortable::after {
+            content: ' ⇅';
+            opacity: 0.3;
+            font-size: 0.8em;
+        }
+        
+        .state-table th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+        
+        .state-table th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+        
+        .state-table td.file-path {
+            max-width: 300px;
+            word-break: break-all;
+            white-space: normal;
+        }
+        
+        .state-table td.kb-name {
+            max-width: 150px;
+        }
+        
+        .state-table td.actions {
+            white-space: nowrap;
         }
         
         .state-table tr:hover {
             background: var(--bg-tertiary);
+        }
+        
+        @media (max-width: 768px) {
+            .state-table td.file-path {
+                max-width: 150px;
+            }
+            
+            .state-table td.kb-name {
+                max-width: 100px;
+            }
         }
         
         .state-status {
@@ -736,20 +833,29 @@ HTML_TEMPLATE = """
                 <div id="ssh_sources_container">
                     {% for source in config.ssh.sources %}
                     <div class="ssh-source-item">
-                        <input type="text" placeholder="Host" name="ssh_host[]" value="{{ source.host }}">
-                        <input type="number" placeholder="Port" name="ssh_port[]" value="{{ source.port | default(22) }}">
-                        <input type="text" placeholder="Username" name="ssh_username[]" value="{{ source.username }}">
-                        <input type="text" placeholder="Password (optional)" name="ssh_password[]" value="{{ source.password | default('') }}">
-                        <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]" value="{{ source.key_filename | default('') }}">
-                        <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' 
-                                  name="ssh_paths[]">{{ source.paths | tojson }}</textarea>
-                        <button type="button" class="secondary" onclick="browseSSH(this)">Browse Files</button>
-                        <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]" value="{{ source.kb | default('') }}">
-                        <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' 
-                                  name="ssh_exclude[]">{{ source.exclude | tojson if source.exclude else '' }}</textarea>
-                        <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' 
-                                  name="ssh_include[]">{{ source.include | tojson if source.include else '' }}</textarea>
-                        <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
+                        <div class="ssh-source-header" onclick="toggleSSHSource(this)">
+                            <div class="ssh-source-title">
+                                <span class="ssh-source-toggle">▼</span>
+                                <span>{{ source.name if source.name else (source.host + '@' + (source.username if source.username else 'unknown')) }}</span>
+                            </div>
+                        </div>
+                        <div class="ssh-source-content">
+                            <input type="text" placeholder="Name/Description (e.g., Production Server)" name="ssh_name[]" value="{{ source.name | default('') }}">
+                            <input type="text" placeholder="Host" name="ssh_host[]" value="{{ source.host }}">
+                            <input type="number" placeholder="Port" name="ssh_port[]" value="{{ source.port | default(22) }}">
+                            <input type="text" placeholder="Username" name="ssh_username[]" value="{{ source.username }}">
+                            <input type="text" placeholder="Password (optional)" name="ssh_password[]" value="{{ source.password | default('') }}">
+                            <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]" value="{{ source.key_filename | default('') }}">
+                            <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' 
+                                      name="ssh_paths[]">{{ source.paths | tojson }}</textarea>
+                            <button type="button" class="secondary" onclick="browseSSH(this)">Browse Files</button>
+                            <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]" value="{{ source.kb | default('') }}">
+                            <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' 
+                                      name="ssh_exclude[]">{{ source.exclude | tojson if source.exclude else '' }}</textarea>
+                            <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' 
+                                      name="ssh_include[]">{{ source.include | tojson if source.include else '' }}</textarea>
+                            <button type="button" class="danger" onclick="this.parentElement.parentElement.remove()">Remove</button>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -791,13 +897,17 @@ HTML_TEMPLATE = """
                 <h2>Sync State Management</h2>
                 <p class="help-text" style="margin-bottom: 15px;">
                     View and manage files that have been synced to Open WebUI. 
-                    You can remove individual files or select multiple items for bulk deletion.
+                    You can remove individual files, change knowledge bases, or select multiple items for bulk operations.
                 </p>
                 
                 <div class="state-controls">
-                    <input type="text" id="state-search" class="state-search" placeholder="Search by path or knowledge base..." onkeyup="filterStateTable()">
+                    <input type="text" id="state-search" class="state-search" placeholder="Search by path, knowledge base, or status..." onkeyup="filterStateTable()">
                     <button onclick="selectAllState()">Select All</button>
                     <button onclick="deselectAllState()">Deselect All</button>
+                    <select id="kb-select" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);">
+                        <option value="">Select KB...</option>
+                    </select>
+                    <button class="secondary" onclick="changeSelectedKB()" id="change-kb-btn" disabled>Change KB</button>
                     <button class="danger" onclick="deleteSelectedState()" id="delete-selected-btn" disabled>Delete Selected</button>
                     <button class="secondary" onclick="refreshStateTable()">Refresh</button>
                 </div>
@@ -807,10 +917,10 @@ HTML_TEMPLATE = """
                         <thead>
                             <tr>
                                 <th><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()"></th>
-                                <th>File Path</th>
-                                <th>Knowledge Base</th>
-                                <th>Status</th>
-                                <th>Last Updated</th>
+                                <th class="sortable" onclick="sortStateTable('path')">File Path</th>
+                                <th class="sortable" onclick="sortStateTable('kb')">Knowledge Base</th>
+                                <th class="sortable" onclick="sortStateTable('status')">Status</th>
+                                <th class="sortable" onclick="sortStateTable('date')">Last Updated</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -908,6 +1018,8 @@ HTML_TEMPLATE = """
         // Sync State Management
         let stateData = [];
         let selectedState = new Set();
+        let sortColumn = null;
+        let sortDirection = 'asc';
         
         async function loadStateTable() {
             const tbody = document.getElementById('state-table-body');
@@ -917,11 +1029,106 @@ HTML_TEMPLATE = """
                 const response = await fetch('/api/state');
                 const data = await response.json();
                 stateData = data.files || [];
+                
+                // Load knowledge bases for dropdown
+                await loadKnowledgeBases();
+                
                 renderStateTable();
             } catch (error) {
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--danger-color);">Error loading sync state</td></tr>';
                 console.error('Error loading state:', error);
             }
+        }
+        
+        async function loadKnowledgeBases() {
+            try {
+                const response = await fetch('/api/knowledge_bases');
+                const data = await response.json();
+                const kbSelect = document.getElementById('kb-select');
+                
+                // Clear existing options except the first one
+                kbSelect.innerHTML = '<option value="">Select KB...</option>';
+                
+                // Add knowledge bases
+                if (data.knowledge_bases && data.knowledge_bases.length > 0) {
+                    data.knowledge_bases.forEach(kb => {
+                        const option = document.createElement('option');
+                        option.value = kb;
+                        option.textContent = kb;
+                        kbSelect.appendChild(option);
+                    });
+                }
+                
+                // Add option to clear KB
+                const clearOption = document.createElement('option');
+                clearOption.value = '__clear__';
+                clearOption.textContent = '(Remove KB Assignment)';
+                kbSelect.appendChild(clearOption);
+            } catch (error) {
+                console.error('Error loading knowledge bases:', error);
+            }
+        }
+        
+        function sortStateTable(column) {
+            // Toggle sort direction if clicking same column
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            
+            // Sort data
+            stateData.sort((a, b) => {
+                let valA, valB;
+                
+                switch(column) {
+                    case 'path':
+                        valA = a.path.toLowerCase();
+                        valB = b.path.toLowerCase();
+                        break;
+                    case 'kb':
+                        valA = (a.kb || '').toLowerCase();
+                        valB = (b.kb || '').toLowerCase();
+                        break;
+                    case 'status':
+                        valA = a.status.toLowerCase();
+                        valB = b.status.toLowerCase();
+                        break;
+                    case 'date':
+                        valA = a.last_attempt || '';
+                        valB = b.last_attempt || '';
+                        break;
+                    default:
+                        return 0;
+                }
+                
+                if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            // Update sort indicators
+            document.querySelectorAll('.state-table th.sortable').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            const headerMap = {
+                'path': 1,
+                'kb': 2,
+                'status': 3,
+                'date': 4
+            };
+            
+            const thIndex = headerMap[column];
+            if (thIndex) {
+                const th = document.querySelectorAll('.state-table th.sortable')[thIndex - 1];
+                if (th) {
+                    th.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                }
+            }
+            
+            renderStateTable();
         }
         
         function renderStateTable() {
@@ -930,7 +1137,8 @@ HTML_TEMPLATE = """
             
             const filteredData = stateData.filter(item => {
                 return item.path.toLowerCase().includes(searchTerm) || 
-                       (item.kb && item.kb.toLowerCase().includes(searchTerm));
+                       (item.kb && item.kb.toLowerCase().includes(searchTerm)) ||
+                       item.status.toLowerCase().includes(searchTerm);
             });
             
             if (filteredData.length === 0) {
@@ -941,8 +1149,8 @@ HTML_TEMPLATE = """
             tbody.innerHTML = filteredData.map(item => `
                 <tr>
                     <td><input type="checkbox" class="state-checkbox" value="${escapeHtml(item.path)}" onchange="updateSelectedState()"></td>
-                    <td>${escapeHtml(item.path)}</td>
-                    <td>${item.kb ? escapeHtml(item.kb) : '-'}</td>
+                    <td class="file-path">${escapeHtml(item.path)}</td>
+                    <td class="kb-name">${item.kb ? escapeHtml(item.kb) : '-'}</td>
                     <td><span class="state-status ${item.status}">${item.status}</span></td>
                     <td>${item.last_attempt ? new Date(item.last_attempt).toLocaleString() : '-'}</td>
                     <td><button class="danger" onclick="deleteStateItem('${escapeHtml(item.path)}')">Delete</button></td>
@@ -963,7 +1171,7 @@ HTML_TEMPLATE = """
         function refreshStateTable() {
             selectedState.clear();
             document.getElementById('select-all-checkbox').checked = false;
-            updateDeleteButton();
+            updateActionButtons();
             loadStateTable();
         }
         
@@ -990,13 +1198,61 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.state-checkbox:checked').forEach(cb => {
                 selectedState.add(cb.value);
             });
-            updateDeleteButton();
+            updateActionButtons();
         }
         
-        function updateDeleteButton() {
-            const btn = document.getElementById('delete-selected-btn');
-            btn.disabled = selectedState.size === 0;
-            btn.textContent = `Delete Selected (${selectedState.size})`;
+        function updateActionButtons() {
+            const deleteBtn = document.getElementById('delete-selected-btn');
+            const changeKbBtn = document.getElementById('change-kb-btn');
+            const count = selectedState.size;
+            
+            deleteBtn.disabled = count === 0;
+            deleteBtn.textContent = `Delete Selected (${count})`;
+            
+            changeKbBtn.disabled = count === 0;
+            changeKbBtn.textContent = count > 0 ? `Change KB (${count})` : 'Change KB';
+        }
+        
+        async function changeSelectedKB() {
+            if (selectedState.size === 0) return;
+            
+            const kbSelect = document.getElementById('kb-select');
+            const kbName = kbSelect.value;
+            
+            if (!kbName) {
+                alert('Please select a knowledge base first');
+                return;
+            }
+            
+            const kbDisplayName = kbName === '__clear__' ? 'no knowledge base' : kbName;
+            const actualKbName = kbName === '__clear__' ? '' : kbName;
+            
+            if (!confirm(`Change knowledge base for ${selectedState.size} item(s) to "${kbDisplayName}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/state/update_kb', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        paths: Array.from(selectedState),
+                        kb_name: actualKbName
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    selectedState.clear();
+                    refreshStateTable();
+                    alert(`Successfully updated ${result.updated_count} item(s)`);
+                } else {
+                    alert('Failed to update KB: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error updating KB: ' + error.message);
+                console.error('Error:', error);
+            }
         }
         
         async function deleteStateItem(path) {
@@ -1301,19 +1557,41 @@ HTML_TEMPLATE = """
             const item = document.createElement('div');
             item.className = 'ssh-source-item';
             item.innerHTML = `
-                <input type="text" placeholder="Host" name="ssh_host[]">
-                <input type="number" placeholder="Port" name="ssh_port[]" value="22">
-                <input type="text" placeholder="Username" name="ssh_username[]">
-                <input type="text" placeholder="Password (optional)" name="ssh_password[]">
-                <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]">
-                <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' name="ssh_paths[]"></textarea>
-                <button type="button" class="secondary" onclick="browseSSH(this)">Browse Files</button>
-                <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]">
-                <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' name="ssh_exclude[]"></textarea>
-                <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' name="ssh_include[]"></textarea>
-                <button type="button" class="danger" onclick="this.parentElement.remove()">Remove</button>
+                <div class="ssh-source-header" onclick="toggleSSHSource(this)">
+                    <div class="ssh-source-title">
+                        <span class="ssh-source-toggle">▼</span>
+                        <span>New SSH Source</span>
+                    </div>
+                </div>
+                <div class="ssh-source-content">
+                    <input type="text" placeholder="Name/Description (e.g., Production Server)" name="ssh_name[]">
+                    <input type="text" placeholder="Host" name="ssh_host[]">
+                    <input type="number" placeholder="Port" name="ssh_port[]" value="22">
+                    <input type="text" placeholder="Username" name="ssh_username[]">
+                    <input type="text" placeholder="Password (optional)" name="ssh_password[]">
+                    <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]">
+                    <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' name="ssh_paths[]"></textarea>
+                    <button type="button" class="secondary" onclick="browseSSH(this)">Browse Files</button>
+                    <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]">
+                    <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' name="ssh_exclude[]"></textarea>
+                    <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' name="ssh_include[]"></textarea>
+                    <button type="button" class="danger" onclick="this.parentElement.parentElement.remove()">Remove</button>
+                </div>
             `;
             container.appendChild(item);
+        }
+        
+        function toggleSSHSource(header) {
+            const content = header.nextElementSibling;
+            const toggle = header.querySelector('.ssh-source-toggle');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                toggle.classList.remove('collapsed');
+            } else {
+                content.classList.add('collapsed');
+                toggle.classList.add('collapsed');
+            }
         }
         
         // Toggle KB configuration based on single mode checkbox
@@ -1436,6 +1714,7 @@ def save():
                 })
         
         # Parse SSH sources
+        ssh_names = request.form.getlist('ssh_name[]')
         ssh_hosts = request.form.getlist('ssh_host[]')
         ssh_ports = request.form.getlist('ssh_port[]')
         ssh_usernames = request.form.getlist('ssh_username[]')
@@ -1453,6 +1732,10 @@ def save():
                     'port': int(ssh_ports[i]) if i < len(ssh_ports) and ssh_ports[i] else 22,
                     'username': ssh_usernames[i]
                 }
+                
+                # Add name/description if provided
+                if i < len(ssh_names) and ssh_names[i]:
+                    source['name'] = ssh_names[i]
                 
                 if i < len(ssh_passwords) and ssh_passwords[i]:
                     source['password'] = ssh_passwords[i]
@@ -1608,6 +1891,86 @@ def delete_state():
     except Exception as e:
         print(f"Error deleting state: {e}")
         return jsonify({'success': False, 'message': 'Failed to delete sync state entries'}), 500
+
+@app.route('/api/state/update_kb', methods=['POST'])
+def update_kb():
+    """API endpoint to update knowledge base for multiple files"""
+    try:
+        data = request.get_json()
+        paths = data.get('paths', [])
+        kb_name = data.get('kb_name', '')
+        
+        if not paths:
+            return jsonify({'success': False, 'message': 'No paths provided'}), 400
+        
+        config = get_config()
+        state_file = config['files']['state_file']
+        
+        if not os.path.exists(state_file):
+            return jsonify({'success': False, 'message': 'State file not found'}), 404
+        
+        # Load state
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+        
+        # Update knowledge base for specified paths
+        updated_count = 0
+        for path in paths:
+            if path in state.get('files', {}):
+                state['files'][path]['knowledge_base'] = kb_name
+                updated_count += 1
+        
+        # Save updated state
+        with open(state_file, 'w') as f:
+            json.dump(state, f, indent=2)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Updated {updated_count} item(s)',
+            'updated_count': updated_count
+        })
+    except Exception as e:
+        print(f"Error updating KB: {e}")
+        return jsonify({'success': False, 'message': 'Failed to update knowledge base'}), 500
+
+@app.route('/api/knowledge_bases', methods=['GET'])
+def get_knowledge_bases():
+    """API endpoint to get list of knowledge bases from state"""
+    try:
+        config = get_config()
+        state_file = config['files']['state_file']
+        
+        if not os.path.exists(state_file):
+            return jsonify({'knowledge_bases': []})
+        
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+        
+        # Get unique knowledge bases from state
+        kb_set = set()
+        for path, info in state.get('files', {}).items():
+            kb = info.get('knowledge_base', '')
+            if kb:
+                kb_set.add(kb)
+        
+        # Also add knowledge bases from config
+        if config['knowledge_bases']['single_kb_mode']:
+            kb_name = config['knowledge_bases']['single_kb_name']
+            if kb_name:
+                kb_set.add(kb_name)
+        else:
+            for mapping in config['knowledge_bases']['mappings']:
+                kb = mapping.get('kb', '')
+                if kb:
+                    kb_set.add(kb)
+        
+        # Convert to sorted list
+        kb_list = sorted(list(kb_set))
+        
+        return jsonify({'knowledge_bases': kb_list})
+    except Exception as e:
+        print(f"Error getting knowledge bases: {e}")
+        return jsonify({'error': 'Failed to get knowledge bases'}), 500
 
 @app.route('/api/ssh/browse', methods=['POST'])
 def browse_ssh():
