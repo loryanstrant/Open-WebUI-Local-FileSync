@@ -6,6 +6,13 @@ import os
 import json
 from flask import Flask, render_template_string, request, jsonify, redirect, url_for
 from config import get_config, save_config_to_file, export_env_to_config_file, DEFAULT_CONFIG_FILE
+from pathlib import Path
+
+try:
+    import paramiko
+    PARAMIKO_AVAILABLE = True
+except ImportError:
+    PARAMIKO_AVAILABLE = False
 
 app = Flask(__name__)
 
@@ -18,6 +25,56 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open-WebUI FileSync Configuration</title>
     <style>
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: white;
+            --bg-tertiary: #f9f9f9;
+            --text-primary: #333;
+            --text-secondary: #555;
+            --text-tertiary: #666;
+            --text-muted: #888;
+            --border-color: #ddd;
+            --border-color-light: #e0e0e0;
+            --accent-color: #4CAF50;
+            --accent-hover: #45a049;
+            --secondary-color: #2196F3;
+            --secondary-hover: #0b7dda;
+            --danger-color: #f44336;
+            --danger-hover: #da190b;
+            --success-bg: #d4edda;
+            --success-text: #155724;
+            --success-border: #c3e6cb;
+            --info-bg: #d1ecf1;
+            --info-text: #0c5460;
+            --info-border: #bee5eb;
+            --shadow: rgba(0,0,0,0.1);
+        }
+        
+        [data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #383838;
+            --text-primary: #e0e0e0;
+            --text-secondary: #c0c0c0;
+            --text-tertiary: #a0a0a0;
+            --text-muted: #888;
+            --border-color: #444;
+            --border-color-light: #555;
+            --accent-color: #66BB6A;
+            --accent-hover: #57a75b;
+            --secondary-color: #42A5F5;
+            --secondary-hover: #2196F3;
+            --danger-color: #EF5350;
+            --danger-hover: #e53935;
+            --success-bg: #1b5e20;
+            --success-text: #a5d6a7;
+            --success-border: #2e7d32;
+            --info-bg: #01579b;
+            --info-text: #81d4fa;
+            --info-border: #0277bd;
+            --shadow: rgba(0,0,0,0.3);
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -26,42 +83,119 @@ HTML_TEMPLATE = """
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f5f5;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             padding: 20px;
             line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
         }
         
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background: white;
+            background: var(--bg-secondary);
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px var(--shadow);
             padding: 30px;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .header-left {
+            flex: 1;
+        }
+        
+        .header-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
         
         h1 {
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 10px;
             font-size: 28px;
         }
         
         .subtitle {
-            color: #666;
+            color: var(--text-tertiary);
             margin-bottom: 30px;
             font-size: 14px;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0;
+        }
+        
+        .nav-tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+        
+        .nav-tab:hover {
+            color: var(--accent-color);
+        }
+        
+        .nav-tab.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .theme-toggle:hover {
+            background: var(--border-color);
         }
         
         .section {
             margin-bottom: 30px;
             padding: 20px;
-            background: #f9f9f9;
+            background: var(--bg-tertiary);
             border-radius: 6px;
-            border-left: 4px solid #4CAF50;
+            border-left: 4px solid var(--accent-color);
+            transition: background-color 0.3s;
         }
         
         .section h2 {
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 15px;
             font-size: 20px;
         }
@@ -73,7 +207,7 @@ HTML_TEMPLATE = """
         label {
             display: block;
             margin-bottom: 5px;
-            color: #555;
+            color: var(--text-secondary);
             font-weight: 500;
             font-size: 14px;
         }
@@ -84,10 +218,21 @@ HTML_TEMPLATE = """
         textarea {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             font-size: 14px;
             font-family: inherit;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transition: border-color 0.3s, background-color 0.3s, color 0.3s;
+        }
+        
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
         }
         
         textarea {
@@ -101,7 +246,7 @@ HTML_TEMPLATE = """
         }
         
         button {
-            background: #4CAF50;
+            background: var(--accent-color);
             color: white;
             padding: 12px 24px;
             border: none;
@@ -113,23 +258,28 @@ HTML_TEMPLATE = """
         }
         
         button:hover {
-            background: #45a049;
+            background: var(--accent-hover);
         }
         
         button.secondary {
-            background: #2196F3;
+            background: var(--secondary-color);
         }
         
         button.secondary:hover {
-            background: #0b7dda;
+            background: var(--secondary-hover);
         }
         
         button.danger {
-            background: #f44336;
+            background: var(--danger-color);
         }
         
         button.danger:hover {
-            background: #da190b;
+            background: var(--danger-hover);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
         .button-group {
@@ -141,11 +291,12 @@ HTML_TEMPLATE = """
         .mapping-item,
         .ssh-source-item,
         .volume-item {
-            background: white;
+            background: var(--bg-secondary);
             padding: 15px;
             border-radius: 4px;
             margin-bottom: 10px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid var(--border-color-light);
+            transition: background-color 0.3s, border-color 0.3s;
         }
         
         .mapping-item button,
@@ -163,20 +314,20 @@ HTML_TEMPLATE = """
         }
         
         .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: var(--success-bg);
+            color: var(--success-text);
+            border: 1px solid var(--success-border);
         }
         
         .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
+            background: var(--info-bg);
+            color: var(--info-text);
+            border: 1px solid var(--info-border);
         }
         
         .help-text {
             font-size: 12px;
-            color: #888;
+            color: var(--text-muted);
             margin-top: 4px;
         }
         
@@ -199,12 +350,202 @@ HTML_TEMPLATE = """
         .array-field input {
             margin-bottom: 5px;
         }
+        
+        /* Sync State Table Styles */
+        .state-table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        
+        .state-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-secondary);
+        }
+        
+        .state-table th,
+        .state-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .state-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            color: var(--text-primary);
+            position: sticky;
+            top: 0;
+        }
+        
+        .state-table tr:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .state-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .state-status.uploaded {
+            background: var(--success-bg);
+            color: var(--success-text);
+        }
+        
+        .state-status.failed {
+            background: var(--danger-color);
+            color: white;
+        }
+        
+        .state-status.processing {
+            background: var(--info-bg);
+            color: var(--info-text);
+        }
+        
+        .state-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .state-search {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: var(--bg-secondary);
+            margin: auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            color: var(--text-primary);
+        }
+        
+        .close {
+            color: var(--text-muted);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+        
+        .close:hover,
+        .close:focus {
+            color: var(--text-primary);
+        }
+        
+        .file-browser {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: var(--bg-secondary);
+        }
+        
+        .file-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color-light);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+        
+        .file-item:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .file-item.selected {
+            background: var(--accent-color);
+            color: white;
+        }
+        
+        .file-icon {
+            font-size: 18px;
+        }
+        
+        .breadcrumb {
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .breadcrumb-item {
+            cursor: pointer;
+            color: var(--secondary-color);
+        }
+        
+        .breadcrumb-item:hover {
+            text-decoration: underline;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Open-WebUI FileSync Configuration</h1>
-        <p class="subtitle">Manage your file synchronization settings</p>
+        <div class="header">
+            <div class="header-left">
+                <h1>Open-WebUI FileSync Configuration</h1>
+                <p class="subtitle">Manage your file synchronization settings</p>
+            </div>
+            <div class="header-right">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <span id="theme-icon">🌙</span>
+                    <span id="theme-text">Dark Mode</span>
+                </button>
+            </div>
+        </div>
         
         {% if message %}
         <div class="alert alert-success">
@@ -218,6 +559,14 @@ HTML_TEMPLATE = """
         </div>
         {% endif %}
         
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('config')">Configuration</button>
+            <button class="nav-tab" onclick="switchTab('state')">Sync State</button>
+        </div>
+        
+        <!-- Configuration Tab -->
+        <div id="config-tab" class="tab-content active">
         <form method="POST" action="/save">
             
             <!-- Open WebUI Settings -->
@@ -382,6 +731,7 @@ HTML_TEMPLATE = """
                         <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]" value="{{ source.key_filename | default('') }}">
                         <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' 
                                   name="ssh_paths[]">{{ source.paths | tojson }}</textarea>
+                        <button type="button" class="secondary" onclick="browseSSH(this)">Browse Files</button>
                         <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]" value="{{ source.kb | default('') }}">
                         <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' 
                                   name="ssh_exclude[]">{{ source.exclude | tojson if source.exclude else '' }}</textarea>
@@ -421,9 +771,423 @@ HTML_TEMPLATE = """
                 <button type="button" class="secondary" onclick="window.location.href='/export_json'">Download JSON</button>
             </div>
         </form>
+        </div>
+        
+        <!-- Sync State Tab -->
+        <div id="state-tab" class="tab-content">
+            <div class="section">
+                <h2>Sync State Management</h2>
+                <p class="help-text" style="margin-bottom: 15px;">
+                    View and manage files that have been synced to Open WebUI. 
+                    You can remove individual files or select multiple items for bulk deletion.
+                </p>
+                
+                <div class="state-controls">
+                    <input type="text" id="state-search" class="state-search" placeholder="Search by path or knowledge base..." onkeyup="filterStateTable()">
+                    <button onclick="selectAllState()">Select All</button>
+                    <button onclick="deselectAllState()">Deselect All</button>
+                    <button class="danger" onclick="deleteSelectedState()" id="delete-selected-btn" disabled>Delete Selected</button>
+                    <button class="secondary" onclick="refreshStateTable()">Refresh</button>
+                </div>
+                
+                <div class="state-table-container">
+                    <table class="state-table" id="state-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()"></th>
+                                <th>File Path</th>
+                                <th>Knowledge Base</th>
+                                <th>Status</th>
+                                <th>Last Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="state-table-body">
+                            <tr>
+                                <td colspan="6" class="loading">Loading sync state...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- SSH File Browser Modal -->
+    <div id="ssh-browser-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Browse SSH Files</h2>
+                <button class="close" onclick="closeSSHBrowser()">&times;</button>
+            </div>
+            <div class="breadcrumb" id="ssh-breadcrumb">
+                <span class="breadcrumb-item" onclick="navigateSSHPath('/')">Root</span>
+            </div>
+            <div class="file-browser" id="file-browser">
+                <div class="loading">Connecting...</div>
+            </div>
+            <div class="button-group" style="margin-top: 15px;">
+                <button class="secondary" onclick="addSelectedPath()">Add Selected Path</button>
+                <button onclick="closeSSHBrowser()">Cancel</button>
+            </div>
+        </div>
     </div>
     
     <script>
+        // Theme Management
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            updateThemeButton(newTheme);
+        }
+        
+        function updateThemeButton(theme) {
+            const icon = document.getElementById('theme-icon');
+            const text = document.getElementById('theme-text');
+            
+            if (theme === 'dark') {
+                icon.textContent = '☀️';
+                text.textContent = 'Light Mode';
+            } else {
+                icon.textContent = '🌙';
+                text.textContent = 'Dark Mode';
+            }
+        }
+        
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeButton(savedTheme);
+        }
+        
+        // Tab Management
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all nav tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Set active nav tab
+            event.target.classList.add('active');
+            
+            // Load state table if switching to state tab
+            if (tabName === 'state') {
+                loadStateTable();
+            }
+        }
+        
+        // Sync State Management
+        let stateData = [];
+        let selectedState = new Set();
+        
+        async function loadStateTable() {
+            const tbody = document.getElementById('state-table-body');
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading sync state...</td></tr>';
+            
+            try {
+                const response = await fetch('/api/state');
+                const data = await response.json();
+                stateData = data.files || [];
+                renderStateTable();
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--danger-color);">Error loading sync state</td></tr>';
+                console.error('Error loading state:', error);
+            }
+        }
+        
+        function renderStateTable() {
+            const tbody = document.getElementById('state-table-body');
+            const searchTerm = document.getElementById('state-search').value.toLowerCase();
+            
+            const filteredData = stateData.filter(item => {
+                return item.path.toLowerCase().includes(searchTerm) || 
+                       (item.kb && item.kb.toLowerCase().includes(searchTerm));
+            });
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No synced files found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = filteredData.map(item => `
+                <tr>
+                    <td><input type="checkbox" class="state-checkbox" value="${escapeHtml(item.path)}" onchange="updateSelectedState()"></td>
+                    <td>${escapeHtml(item.path)}</td>
+                    <td>${item.kb ? escapeHtml(item.kb) : '-'}</td>
+                    <td><span class="state-status ${item.status}">${item.status}</span></td>
+                    <td>${item.last_attempt ? new Date(item.last_attempt).toLocaleString() : '-'}</td>
+                    <td><button class="danger" onclick="deleteStateItem('${escapeHtml(item.path)}')">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function filterStateTable() {
+            renderStateTable();
+        }
+        
+        function refreshStateTable() {
+            selectedState.clear();
+            document.getElementById('select-all-checkbox').checked = false;
+            updateDeleteButton();
+            loadStateTable();
+        }
+        
+        function toggleSelectAll() {
+            const checked = document.getElementById('select-all-checkbox').checked;
+            document.querySelectorAll('.state-checkbox').forEach(cb => {
+                cb.checked = checked;
+            });
+            updateSelectedState();
+        }
+        
+        function selectAllState() {
+            document.getElementById('select-all-checkbox').checked = true;
+            toggleSelectAll();
+        }
+        
+        function deselectAllState() {
+            document.getElementById('select-all-checkbox').checked = false;
+            toggleSelectAll();
+        }
+        
+        function updateSelectedState() {
+            selectedState.clear();
+            document.querySelectorAll('.state-checkbox:checked').forEach(cb => {
+                selectedState.add(cb.value);
+            });
+            updateDeleteButton();
+        }
+        
+        function updateDeleteButton() {
+            const btn = document.getElementById('delete-selected-btn');
+            btn.disabled = selectedState.size === 0;
+            btn.textContent = `Delete Selected (${selectedState.size})`;
+        }
+        
+        async function deleteStateItem(path) {
+            if (!confirm(`Are you sure you want to remove "${path}" from the sync state?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/state/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({paths: [path]})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    refreshStateTable();
+                } else {
+                    alert('Failed to delete item: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error deleting item: ' + error.message);
+                console.error('Error:', error);
+            }
+        }
+        
+        async function deleteSelectedState() {
+            if (selectedState.size === 0) return;
+            
+            if (!confirm(`Are you sure you want to remove ${selectedState.size} item(s) from the sync state?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/state/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({paths: Array.from(selectedState)})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    selectedState.clear();
+                    refreshStateTable();
+                } else {
+                    alert('Failed to delete items: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error deleting items: ' + error.message);
+                console.error('Error:', error);
+            }
+        }
+        
+        // SSH File Browser
+        let currentSSHSource = null;
+        let currentSSHPath = '/';
+        let selectedSSHPath = null;
+        
+        function browseSSH(button) {
+            const sshItem = button.closest('.ssh-source-item');
+            const host = sshItem.querySelector('input[name="ssh_host[]"]').value;
+            const port = sshItem.querySelector('input[name="ssh_port[]"]').value;
+            const username = sshItem.querySelector('input[name="ssh_username[]"]').value;
+            const password = sshItem.querySelector('input[name="ssh_password[]"]').value;
+            const keyFilename = sshItem.querySelector('input[name="ssh_key_filename[]"]').value;
+            
+            if (!host || !username) {
+                alert('Please enter host and username first');
+                return;
+            }
+            
+            currentSSHSource = {
+                sshItem: sshItem,
+                host: host,
+                port: port || 22,
+                username: username,
+                password: password,
+                key_filename: keyFilename
+            };
+            
+            currentSSHPath = '/';
+            document.getElementById('ssh-browser-modal').classList.add('active');
+            loadSSHDirectory('/');
+        }
+        
+        async function loadSSHDirectory(path) {
+            const browser = document.getElementById('file-browser');
+            browser.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                const response = await fetch('/api/ssh/browse', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        host: currentSSHSource.host,
+                        port: currentSSHSource.port,
+                        username: currentSSHSource.username,
+                        password: currentSSHSource.password,
+                        key_filename: currentSSHSource.key_filename,
+                        path: path
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    renderSSHDirectory(data.items, path);
+                    updateSSHBreadcrumb(path);
+                } else {
+                    browser.innerHTML = `<div class="loading" style="color: var(--danger-color);">${data.error}</div>`;
+                }
+            } catch (error) {
+                browser.innerHTML = `<div class="loading" style="color: var(--danger-color);">Error: ${error.message}</div>`;
+                console.error('Error:', error);
+            }
+        }
+        
+        function renderSSHDirectory(items, path) {
+            const browser = document.getElementById('file-browser');
+            
+            if (items.length === 0) {
+                browser.innerHTML = '<div class="loading">Empty directory</div>';
+                return;
+            }
+            
+            browser.innerHTML = items.map(item => {
+                const icon = item.is_dir ? '📁' : '📄';
+                const itemPath = path.endsWith('/') ? path + item.name : path + '/' + item.name;
+                const onclick = item.is_dir ? 
+                    `navigateSSHPath('${escapeHtml(itemPath)}')` : 
+                    `selectSSHItem('${escapeHtml(itemPath)}')`;
+                return `
+                    <div class="file-item" onclick="${onclick}">
+                        <span class="file-icon">${icon}</span>
+                        <span>${escapeHtml(item.name)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateSSHBreadcrumb(path) {
+            const breadcrumb = document.getElementById('ssh-breadcrumb');
+            const parts = path.split('/').filter(p => p);
+            
+            let html = '<span class="breadcrumb-item" onclick="navigateSSHPath(\'/\')">Root</span>';
+            let currentPath = '';
+            
+            parts.forEach(part => {
+                currentPath += '/' + part;
+                html += ` / <span class="breadcrumb-item" onclick="navigateSSHPath('${currentPath}')">${escapeHtml(part)}</span>`;
+            });
+            
+            breadcrumb.innerHTML = html;
+        }
+        
+        function navigateSSHPath(path) {
+            currentSSHPath = path;
+            selectedSSHPath = null;
+            loadSSHDirectory(path);
+        }
+        
+        function selectSSHItem(path) {
+            selectedSSHPath = path;
+            // Highlight selected item
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+        }
+        
+        function addSelectedPath() {
+            if (!selectedSSHPath && currentSSHPath === '/') {
+                alert('Please select a file or directory');
+                return;
+            }
+            
+            const pathToAdd = selectedSSHPath || currentSSHPath;
+            const pathsTextarea = currentSSHSource.sshItem.querySelector('textarea[name="ssh_paths[]"]');
+            
+            try {
+                let paths = [];
+                const currentValue = pathsTextarea.value.trim();
+                if (currentValue) {
+                    paths = JSON.parse(currentValue);
+                }
+                
+                if (!Array.isArray(paths)) {
+                    paths = [];
+                }
+                
+                if (!paths.includes(pathToAdd)) {
+                    paths.push(pathToAdd);
+                    pathsTextarea.value = JSON.stringify(paths, null, 2);
+                }
+                
+                closeSSHBrowser();
+            } catch (error) {
+                alert('Error adding path: ' + error.message);
+            }
+        }
+        
+        function closeSSHBrowser() {
+            document.getElementById('ssh-browser-modal').classList.remove('active');
+            currentSSHSource = null;
+            currentSSHPath = '/';
+            selectedSSHPath = null;
+        }
+        
         function addKBMapping() {
             const container = document.getElementById('kb_mappings_container');
             const item = document.createElement('div');
@@ -465,6 +1229,7 @@ HTML_TEMPLATE = """
                 <input type="text" placeholder="Password (optional)" name="ssh_password[]">
                 <input type="text" placeholder="Key Filename (optional)" name="ssh_key_filename[]">
                 <textarea placeholder='Remote Paths - directories or files (JSON array, e.g., ["/etc/app", "/config/app.conf"])' name="ssh_paths[]"></textarea>
+                <button type="button" class="secondary" onclick="browseSSH(this)">Browse Files</button>
                 <input type="text" placeholder="Knowledge Base Name (optional)" name="ssh_kb[]">
                 <textarea placeholder='Exclude patterns (JSON array, e.g., ["*.log", ".git/*", "*_backup*"])' name="ssh_exclude[]"></textarea>
                 <textarea placeholder='Include patterns - overrides exclusions (JSON array, e.g., ["includes/*", "*.conf"])' name="ssh_include[]"></textarea>
@@ -488,6 +1253,10 @@ HTML_TEMPLATE = """
         
         // Initialize visibility on load
         window.addEventListener('load', function() {
+            // Initialize theme
+            initTheme();
+            
+            // Initialize KB single mode visibility
             const checkbox = document.getElementById('kb_single_mode');
             const event = new Event('change');
             checkbox.dispatchEvent(event);
@@ -692,6 +1461,152 @@ def migrate():
         return redirect(url_for('index', message='Environment variables migrated to config file successfully!'))
     else:
         return redirect(url_for('index', info='Failed to migrate environment variables.'))
+
+@app.route('/api/state', methods=['GET'])
+def get_state():
+    """API endpoint to get sync state"""
+    try:
+        config = get_config()
+        state_file = config['files']['state_file']
+        
+        if not os.path.exists(state_file):
+            return jsonify({'files': []})
+        
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+        
+        # Convert state to list format for table display
+        files = []
+        for path, info in state.get('files', {}).items():
+            files.append({
+                'path': path,
+                'status': info.get('status', 'unknown'),
+                'kb': info.get('knowledge_base', ''),
+                'last_attempt': info.get('last_attempt', ''),
+                'hash': info.get('hash', '')
+            })
+        
+        return jsonify({'files': files})
+    except Exception as e:
+        print(f"Error loading state: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/state/delete', methods=['POST'])
+def delete_state():
+    """API endpoint to delete sync state entries"""
+    try:
+        data = request.get_json()
+        paths = data.get('paths', [])
+        
+        if not paths:
+            return jsonify({'success': False, 'message': 'No paths provided'}), 400
+        
+        config = get_config()
+        state_file = config['files']['state_file']
+        
+        if not os.path.exists(state_file):
+            return jsonify({'success': False, 'message': 'State file not found'}), 404
+        
+        # Load state
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+        
+        # Remove specified paths
+        deleted_count = 0
+        for path in paths:
+            if path in state.get('files', {}):
+                del state['files'][path]
+                deleted_count += 1
+        
+        # Save updated state
+        with open(state_file, 'w') as f:
+            json.dump(state, f, indent=2)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Deleted {deleted_count} item(s)',
+            'deleted_count': deleted_count
+        })
+    except Exception as e:
+        print(f"Error deleting state: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/ssh/browse', methods=['POST'])
+def browse_ssh():
+    """API endpoint to browse SSH filesystem"""
+    if not PARAMIKO_AVAILABLE:
+        return jsonify({'success': False, 'error': 'SSH functionality not available'}), 400
+    
+    try:
+        data = request.get_json()
+        host = data.get('host')
+        port = data.get('port', 22)
+        username = data.get('username')
+        password = data.get('password')
+        key_filename = data.get('key_filename')
+        path = data.get('path', '/')
+        
+        if not host or not username:
+            return jsonify({'success': False, 'error': 'Host and username required'}), 400
+        
+        # Resolve key path if relative
+        config = get_config()
+        ssh_key_path = config['ssh']['key_path']
+        
+        if key_filename and not os.path.isabs(key_filename):
+            key_filename = os.path.join(ssh_key_path, key_filename)
+        
+        # Connect to SSH
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        connect_kwargs = {
+            'hostname': host,
+            'port': port,
+            'username': username,
+            'timeout': 30
+        }
+        
+        if key_filename and os.path.exists(key_filename):
+            connect_kwargs['key_filename'] = key_filename
+            if password:
+                connect_kwargs['passphrase'] = password
+        elif password:
+            connect_kwargs['password'] = password
+        else:
+            return jsonify({'success': False, 'error': 'No authentication method provided'}), 400
+        
+        ssh_client.connect(**connect_kwargs)
+        sftp_client = ssh_client.open_sftp()
+        
+        # List directory
+        items = []
+        try:
+            for entry in sftp_client.listdir_attr(path):
+                import stat as stat_module
+                items.append({
+                    'name': entry.filename,
+                    'is_dir': stat_module.S_ISDIR(entry.st_mode),
+                    'size': entry.st_size,
+                    'mtime': entry.st_mtime
+                })
+            
+            # Sort: directories first, then files
+            items.sort(key=lambda x: (not x['is_dir'], x['name'].lower()))
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Failed to list directory: {str(e)}'}), 400
+        finally:
+            sftp_client.close()
+            ssh_client.close()
+        
+        return jsonify({'success': True, 'items': items, 'path': path})
+    except paramiko.AuthenticationException:
+        return jsonify({'success': False, 'error': 'Authentication failed'}), 401
+    except paramiko.SSHException as e:
+        return jsonify({'success': False, 'error': f'SSH error: {str(e)}'}), 500
+    except Exception as e:
+        print(f"Error browsing SSH: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def main():
     """Run the web interface"""
