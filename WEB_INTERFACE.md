@@ -4,6 +4,10 @@
 
 The Open-WebUI-Local-FileSync now includes a web-based configuration interface that allows you to manage all settings through a browser instead of editing docker-compose.yml environment variables.
 
+**Screenshot:**
+
+![Web Interface Configuration](https://github.com/user-attachments/assets/16be0cc1-f778-4415-b52a-afa5adfa7c38)
+
 ## Features
 
 - **Visual Configuration Editor**: Easy-to-use web interface for all settings

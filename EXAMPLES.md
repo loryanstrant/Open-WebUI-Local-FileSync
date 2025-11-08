@@ -2,6 +2,8 @@
 
 This document provides practical examples for deploying the Open WebUI File Sync container.
 
+> 💡 **Note:** For more structured deployment scenarios, see the [Deployment Guide](DEPLOYMENT.md). This file contains additional edge-case examples and variations.
+
 ## Example 1: Basic Daily Sync
 
 Sync markdown files from a local directory daily at 2 AM:

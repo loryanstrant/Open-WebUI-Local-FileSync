@@ -5,7 +5,7 @@ This guide will get you started with the new knowledge base mapping and retry lo
 ## Prerequisites
 
 - Open WebUI instance running and accessible
-- Open WebUI API key (see [main README](README.md#getting-your-open-webui-api-key))
+- Open WebUI API key (see [Configuration Guide](CONFIGURATION.md#required-environment-variables) for details on obtaining your API key)
 - Docker and docker-compose installed
 
 ## Basic Setup (No Knowledge Bases)
