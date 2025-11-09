@@ -26,7 +26,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Open-WebUI FileSync Configuration</title>
+    <title>Open WebUI FileSync</title>
     <style>
         :root {
             --bg-primary: #f5f5f5;
@@ -2670,7 +2670,13 @@ def get_state():
                 'status': info.get('status', 'unknown'),
                 'kb': info.get('knowledge_base', ''),
                 'last_attempt': info.get('last_attempt', ''),
-                'hash': info.get('hash', '')
+                'hash': info.get('hash', ''),
+                'source_type': info.get('source_type', 'local'),
+                'source_name': info.get('source_name', 'Unknown'),
+                'created_at': info.get('created_at', ''),
+                'modified_at': info.get('modified_at', ''),
+                'file_size': info.get('file_size', 0),
+                'filename': info.get('filename', os.path.basename(path))
             })
         
         return jsonify({'files': files})
@@ -2722,6 +2728,8 @@ def delete_state():
 def update_kb():
     """API endpoint to update knowledge base for multiple files"""
     try:
+        import requests
+        
         data = request.get_json()
         paths = data.get('paths', [])
         kb_name = data.get('kb_name', '')
@@ -2739,10 +2747,68 @@ def update_kb():
         with open(state_file, 'r') as f:
             state = json.load(f)
         
+        # Get Open WebUI URL and API key
+        openwebui_url = config['openwebui']['url'].rstrip('/')
+        api_key = config['openwebui']['api_key']
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get or create the target KB if specified
+        target_kb_id = None
+        if kb_name:
+            # Try to find existing KB or create new one
+            try:
+                kb_list_response = requests.get(f"{openwebui_url}/api/v1/knowledge/", headers=headers, timeout=30)
+                if kb_list_response.status_code == 200:
+                    kbs = kb_list_response.json()
+                    for kb in kbs:
+                        if kb.get('name') == kb_name:
+                            target_kb_id = kb.get('id')
+                            break
+                
+                # Create KB if not found
+                if not target_kb_id:
+                    kb_create_response = requests.post(
+                        f"{openwebui_url}/api/v1/knowledge/",
+                        headers=headers,
+                        json={'name': kb_name, 'description': f'Knowledge base for {kb_name}'},
+                        timeout=30
+                    )
+                    if kb_create_response.status_code in [200, 201]:
+                        target_kb_id = kb_create_response.json().get('id')
+            except Exception as e:
+                print(f"Error getting/creating KB: {e}")
+        
         # Update knowledge base for specified paths
         updated_count = 0
+        errors = []
+        
         for path in paths:
             if path in state.get('files', {}):
+                file_info = state['files'][path]
+                file_id = file_info.get('file_id')
+                old_kb = file_info.get('knowledge_base', '')
+                
+                # If file has a file_id and KB is changing, update in Open WebUI
+                if file_id and target_kb_id and old_kb != kb_name:
+                    try:
+                        # Add file to new KB
+                        add_response = requests.post(
+                            f"{openwebui_url}/api/v1/knowledge/{target_kb_id}/file/add",
+                            headers=headers,
+                            json={'file_id': file_id},
+                            timeout=30
+                        )
+                        if add_response.status_code not in [200, 201]:
+                            errors.append(f"Failed to add {path} to KB: {add_response.text}")
+                            continue
+                    except Exception as e:
+                        errors.append(f"Error updating {path}: {str(e)}")
+                        continue
+                
+                # Update state
                 state['files'][path]['knowledge_base'] = kb_name
                 updated_count += 1
         
@@ -2750,14 +2816,21 @@ def update_kb():
         with open(state_file, 'w') as f:
             json.dump(state, f, indent=2)
         
+        message = f'Updated {updated_count} item(s)'
+        if errors:
+            message += f'. Errors: {len(errors)}'
+        
         return jsonify({
             'success': True, 
-            'message': f'Updated {updated_count} item(s)',
-            'updated_count': updated_count
+            'message': message,
+            'updated_count': updated_count,
+            'errors': errors if errors else None
         })
     except Exception as e:
         print(f"Error updating KB: {e}")
-        return jsonify({'success': False, 'message': 'Failed to update knowledge base'}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Failed to update knowledge base: {str(e)}'}), 500
 
 @app.route('/api/knowledge_bases', methods=['GET'])
 def get_knowledge_bases():
@@ -3051,8 +3124,12 @@ def get_status():
             files_dict = state.get('files', {})
             stats['total_files'] = len(files_dict)
             
-            # Count by status
+            # Count by status and source
             kb_file_counts = {}
+            source_file_counts = {}
+            source_conversions = {}
+            source_errors = {}
+            
             for path, info in files_dict.items():
                 status = info.get('status', 'unknown')
                 if status == 'uploaded':
@@ -3077,6 +3154,22 @@ def get_status():
                 else:
                     kb_file_counts['Unassigned'] = kb_file_counts.get('Unassigned', 0) + 1
                 
+                # Count files per source
+                source_name = info.get('source_name', 'Unknown')
+                if source_name not in source_file_counts:
+                    source_file_counts[source_name] = 0
+                    source_conversions[source_name] = 0
+                    source_errors[source_name] = 0
+                
+                if status == 'uploaded':
+                    source_file_counts[source_name] += 1
+                    # Check if this was a conversion
+                    ext = os.path.splitext(path)[1].lower()
+                    if ext in ['.json', '.yaml', '.yml', '.conf']:
+                        source_conversions[source_name] += 1
+                elif status == 'failed':
+                    source_errors[source_name] += 1
+                
                 # Get last sync time (most recent last_attempt)
                 last_attempt = info.get('last_attempt')
                 if last_attempt:
@@ -3088,29 +3181,15 @@ def get_status():
             stats['active_kbs'] = len([kb for kb in kb_file_counts.keys() if kb != 'Unassigned'])
             stats['kb_stats'] = [{'name': kb, 'file_count': count} for kb, count in sorted(kb_file_counts.items(), key=lambda x: x[1], reverse=True)]
         
-        # Source stats
+        # Source stats - now using tracked data
         sources = []
-        
-        # Local files source
-        files_dir = config['files']['directory']
-        if os.path.exists(files_dir):
+        for source_name in sorted(source_file_counts.keys()):
             sources.append({
-                'name': f'Local Files ({files_dir})',
-                'files': stats['synced_files'],
-                'conversions': stats['total_conversions'],
-                'errors': stats['failed_files']
+                'name': source_name,
+                'files': source_file_counts[source_name],
+                'conversions': source_conversions[source_name],
+                'errors': source_errors[source_name]
             })
-        
-        # SSH sources
-        if config['ssh']['enabled'] and config['ssh']['sources']:
-            for ssh_source in config['ssh']['sources']:
-                ssh_name = ssh_source.get('name', ssh_source.get('host', 'Unknown'))
-                sources.append({
-                    'name': f'SSH: {ssh_name}',
-                    'files': 0,  # Would need to track per-source
-                    'conversions': 0,
-                    'errors': 0
-                })
         
         stats['source_stats'] = sources
         
