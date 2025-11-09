@@ -20,6 +20,11 @@ except ImportError:
     yaml = None
 
 try:
+    import tomllib
+except ImportError:
+    tomllib = None
+
+try:
     import paramiko
 except ImportError:
     paramiko = None
@@ -53,7 +58,7 @@ else:
     OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
     OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
     FILES_DIR = os.getenv('FILES_DIR', '/data')
-    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf').split(',')
+    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf,.toml').split(',')
     STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
     KNOWLEDGE_BASE_MAPPING = os.getenv('KNOWLEDGE_BASE_MAPPING', '')
     KNOWLEDGE_BASE_NAME = os.getenv('KNOWLEDGE_BASE_NAME', '')
@@ -494,6 +499,19 @@ def convert_conf_to_markdown(conf_content, filename):
     lines.append("```")
     return "\n".join(lines)
 
+def convert_toml_to_markdown(toml_data, filename):
+    """Convert TOML data to formatted Markdown
+    
+    Args:
+        toml_data: Parsed TOML object (dict)
+        filename: Original filename for title
+    
+    Returns:
+        Markdown formatted string
+    """
+    # TOML and JSON have similar structures (dicts), reuse the JSON converter
+    return convert_json_to_markdown(toml_data, filename)
+
 
 
 def add_file_metadata_header(filepath, source_info, original_path=None, created_time=None, modified_time=None):
@@ -666,7 +684,7 @@ def should_process_file(filepath, filters, mapped_path=None):
     return True
 
 def convert_file_to_markdown(filepath):
-    """Convert JSON/YAML/CONF files to Markdown format
+    """Convert JSON/YAML/CONF/TOML files to Markdown format
     
     Args:
         filepath: Path to the file
@@ -679,8 +697,8 @@ def convert_file_to_markdown(filepath):
     """
     ext = filepath.suffix.lower()
     
-    # Only convert JSON, YAML, and CONF files
-    if ext not in ['.json', '.yaml', '.yml', '.conf']:
+    # Only convert JSON, YAML, CONF, and TOML files
+    if ext not in ['.json', '.yaml', '.yml', '.conf', '.toml']:
         return True, filepath, False
     
     try:
@@ -713,6 +731,17 @@ def convert_file_to_markdown(filepath):
                 else:
                     log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
                     return False, None, False
+        elif ext == '.toml':
+            if tomllib is None:
+                log(f"⚠ tomllib not available, cannot convert {filepath.name}")
+                return True, filepath, False
+            try:
+                # tomllib.loads() requires string input
+                data = tomllib.loads(content)
+                markdown_content = convert_toml_to_markdown(data, filepath.name)
+            except Exception as e:
+                log(f"⚠ Failed to parse TOML file {filepath.name}: {e}")
+                return False, None, False
         elif ext == '.conf':
             # Convert .conf files as plain text with formatting
             markdown_content = convert_conf_to_markdown(content, filepath.name)
