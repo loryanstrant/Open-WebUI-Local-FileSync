@@ -8,6 +8,9 @@ from flask import Flask, render_template_string, request, jsonify, redirect, url
 from config import get_config, save_config_to_file, export_env_to_config_file, DEFAULT_CONFIG_FILE
 from pathlib import Path
 
+# Version information
+VERSION = "1.0.0"
+
 try:
     import paramiko
     PARAMIKO_AVAILABLE = True
@@ -127,6 +130,29 @@ HTML_TEMPLATE = """
             color: var(--text-tertiary);
             margin-bottom: 30px;
             font-size: 14px;
+        }
+        
+        .version {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: normal;
+        }
+        
+        .github-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .github-link:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
         }
         
         .nav-tabs {
@@ -639,19 +665,166 @@ HTML_TEMPLATE = """
             padding: 20px;
             color: var(--text-muted);
         }
+        
+        /* Status Dashboard Styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: var(--bg-tertiary);
+            padding: 20px;
+            border-radius: 6px;
+            border-left: 4px solid var(--accent-color);
+            transition: all 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px var(--shadow);
+        }
+        
+        .stat-card.warning {
+            border-left-color: #ff9800;
+        }
+        
+        .stat-card.error {
+            border-left-color: var(--danger-color);
+        }
+        
+        .stat-card.success {
+            border-left-color: var(--accent-color);
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-tertiary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .stat-detail {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        
+        .kb-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .kb-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .kb-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .kb-count {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        
+        .source-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .source-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+        
+        .source-name {
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .source-stats {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 15px;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            word-wrap: break-word;
+        }
+        
+        .log-entry.error {
+            border-left: 3px solid var(--danger-color);
+            background: rgba(244, 67, 54, 0.1);
+        }
+        
+        .log-entry.warning {
+            border-left: 3px solid #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+        }
+        
+        .log-entry.info {
+            border-left: 3px solid var(--secondary-color);
+        }
+        
+        .log-timestamp {
+            color: var(--text-muted);
+            font-size: 11px;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .spinning {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <h1>Open-WebUI FileSync Configuration</h1>
+                <h1>Open WebUI FileSync <span class="version">v{{ version }}</span></h1>
                 <p class="subtitle">Manage your file synchronization settings</p>
             </div>
             <div class="header-right">
-                <button class="theme-toggle" onclick="toggleTheme()">
+                <a href="https://github.com/loryanstrant/Open-WebUI-Local-FileSync" target="_blank" class="github-link" title="View on GitHub">
+                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub
+                </a>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
                     <span id="theme-icon">🌙</span>
-                    <span id="theme-text">Dark Mode</span>
+                    <span id="theme-text">Dark</span>
                 </button>
             </div>
         </div>
@@ -670,13 +843,36 @@ HTML_TEMPLATE = """
         
         <!-- Navigation Tabs -->
         <div class="nav-tabs">
-            <button class="nav-tab active" onclick="switchTab('config')">Configuration</button>
+            <button class="nav-tab active" onclick="switchTab('status')">Status</button>
+            <button class="nav-tab" onclick="switchTab('config')">Configuration</button>
             <button class="nav-tab" onclick="switchTab('state')">Sync State</button>
-            <button class="nav-tab" onclick="switchTab('files')">File Management</button>
+            <button class="nav-tab" onclick="switchTab('files')">Knowledge Base Files</button>
+            <button class="nav-tab" onclick="switchTab('logs')">Logs</button>
+        </div>
+        
+        <!-- Status Tab -->
+        <div id="status-tab" class="tab-content active">
+            <div class="section">
+                <h2>Sync Status Dashboard</h2>
+                <p class="help-text" style="margin-bottom: 15px;">
+                    Overview of your file synchronization status and statistics.
+                </p>
+                
+                <div class="button-group" style="margin-bottom: 20px;">
+                    <button class="secondary" onclick="forceSyncNow()">
+                        <span id="sync-btn-icon">🔄</span> Force Sync Now
+                    </button>
+                    <button class="secondary" onclick="refreshStatusDashboard()">↻ Refresh</button>
+                </div>
+                
+                <div id="status-dashboard">
+                    <div class="loading">Loading status...</div>
+                </div>
+            </div>
         </div>
         
         <!-- Configuration Tab -->
-        <div id="config-tab" class="tab-content active">
+        <div id="config-tab" class="tab-content">
         <form method="POST" action="/save">
             
             <!-- Open WebUI Settings -->
@@ -947,7 +1143,7 @@ HTML_TEMPLATE = """
         <!-- File Management Tab -->
         <div id="files-tab" class="tab-content">
             <div class="section">
-                <h2>File Management</h2>
+                <h2>Knowledge Base File Management</h2>
                 <p class="help-text" style="margin-bottom: 15px;">
                     Manage files and knowledge bases in Open WebUI. View, search, and delete files directly from the knowledge base.
                 </p>
@@ -981,6 +1177,34 @@ HTML_TEMPLATE = """
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="section">
+                <h2>Sync Logs</h2>
+                <p class="help-text" style="margin-bottom: 15px;">
+                    View synchronization logs and errors. Use the search box to filter log entries.
+                </p>
+                
+                <div class="state-controls">
+                    <input type="text" id="logs-search" class="state-search" placeholder="Search logs..." onkeyup="filterLogs()">
+                    <select id="logs-level-filter" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);" onchange="filterLogs()">
+                        <option value="">All Levels</option>
+                        <option value="ERROR">Errors</option>
+                        <option value="WARNING">Warnings</option>
+                        <option value="INFO">Info</option>
+                    </select>
+                    <button class="secondary" onclick="refreshLogs()">Refresh</button>
+                    <button class="danger" onclick="clearLogs()">Clear Logs</button>
+                </div>
+                
+                <div class="state-table-container">
+                    <div id="logs-container" style="background: var(--bg-tertiary); padding: 15px; border-radius: 4px; max-height: 600px; overflow-y: auto; font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 13px; line-height: 1.5;">
+                        <div class="loading">Loading logs...</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1028,11 +1252,11 @@ HTML_TEMPLATE = """
             const text = document.getElementById('theme-text');
             
             if (theme === 'dark') {
-                icon.textContent = '☀️';
-                text.textContent = 'Light Mode';
-            } else {
                 icon.textContent = '🌙';
-                text.textContent = 'Dark Mode';
+                text.textContent = 'Dark';
+            } else {
+                icon.textContent = '☀️';
+                text.textContent = 'Light';
             }
         }
         
@@ -1060,14 +1284,15 @@ HTML_TEMPLATE = """
             // Set active nav tab
             event.target.classList.add('active');
             
-            // Load state table if switching to state tab
-            if (tabName === 'state') {
+            // Load appropriate content
+            if (tabName === 'status') {
+                loadStatusDashboard();
+            } else if (tabName === 'state') {
                 loadStateTable();
-            }
-            
-            // Load files table if switching to files tab
-            if (tabName === 'files') {
+            } else if (tabName === 'files') {
                 loadFilesTable();
+            } else if (tabName === 'logs') {
+                loadLogs();
             }
         }
         
@@ -1979,6 +2204,232 @@ HTML_TEMPLATE = """
             }
         });
         
+        // Status Dashboard Functions
+        async function loadStatusDashboard() {
+            const dashboard = document.getElementById('status-dashboard');
+            dashboard.innerHTML = '<div class="loading">Loading status...</div>';
+            
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderStatusDashboard(data);
+                } else {
+                    dashboard.innerHTML = '<div style="text-align: center; color: var(--danger-color);">Error loading status</div>';
+                }
+            } catch (error) {
+                dashboard.innerHTML = '<div style="text-align: center; color: var(--danger-color);">Error loading status</div>';
+                console.error('Error loading status:', error);
+            }
+        }
+        
+        function renderStatusDashboard(data) {
+            const dashboard = document.getElementById('status-dashboard');
+            
+            const html = `
+                <div class="stats-grid">
+                    <div class="stat-card success">
+                        <div class="stat-label">Total Files</div>
+                        <div class="stat-value">${data.total_files || 0}</div>
+                        <div class="stat-detail">${data.synced_files || 0} synced</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-label">Knowledge Bases</div>
+                        <div class="stat-value">${data.total_kbs || 0}</div>
+                        <div class="stat-detail">${data.active_kbs || 0} active</div>
+                    </div>
+                    
+                    <div class="stat-card ${data.failed_files > 0 ? 'error' : ''}">
+                        <div class="stat-label">Failed Uploads</div>
+                        <div class="stat-value">${data.failed_files || 0}</div>
+                        <div class="stat-detail">${data.pending_retries || 0} pending retry</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-label">Conversions</div>
+                        <div class="stat-value">${data.total_conversions || 0}</div>
+                        <div class="stat-detail">JSON/YAML to MD</div>
+                    </div>
+                </div>
+                
+                ${data.kb_stats && data.kb_stats.length > 0 ? `
+                <div class="section">
+                    <h2>Files per Knowledge Base</h2>
+                    <ul class="kb-list">
+                        ${data.kb_stats.map(kb => `
+                            <li class="kb-item">
+                                <span class="kb-name">${escapeHtml(kb.name || 'Unassigned')}</span>
+                                <span class="kb-count">${kb.file_count} files</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                ${data.source_stats && data.source_stats.length > 0 ? `
+                <div class="section">
+                    <h2>Sync Sources</h2>
+                    <ul class="source-list">
+                        ${data.source_stats.map(source => `
+                            <li class="source-item">
+                                <div class="source-name">${escapeHtml(source.name)}</div>
+                                <div class="source-stats">
+                                    <span>📁 ${source.files} files</span>
+                                    ${source.conversions > 0 ? `<span>🔄 ${source.conversions} converted</span>` : ''}
+                                    ${source.errors > 0 ? `<span style="color: var(--danger-color);">❌ ${source.errors} errors</span>` : ''}
+                                </div>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                ${data.last_sync ? `
+                <div style="margin-top: 20px; padding: 15px; background: var(--bg-tertiary); border-radius: 4px;">
+                    <div style="color: var(--text-secondary); font-size: 14px;">
+                        <strong>Last Sync:</strong> ${new Date(data.last_sync).toLocaleString()}
+                    </div>
+                    ${data.next_sync ? `
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top: 5px;">
+                            <strong>Next Scheduled:</strong> ${new Date(data.next_sync).toLocaleString()}
+                        </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+            `;
+            
+            dashboard.innerHTML = html;
+        }
+        
+        function refreshStatusDashboard() {
+            loadStatusDashboard();
+        }
+        
+        async function forceSyncNow() {
+            const btn = event.target.closest('button');
+            const icon = document.getElementById('sync-btn-icon');
+            const originalText = btn.innerHTML;
+            
+            btn.disabled = true;
+            icon.classList.add('spinning');
+            btn.innerHTML = '<span class="spinning">🔄</span> Syncing...';
+            
+            try {
+                const response = await fetch('/api/sync/force', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Sync completed successfully!\\n\\n' +
+                          'Uploaded: ' + (result.uploaded || 0) + '\\n' +
+                          'Skipped: ' + (result.skipped || 0) + '\\n' +
+                          'Failed: ' + (result.failed || 0));
+                    refreshStatusDashboard();
+                } else {
+                    alert('Sync failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error triggering sync: ' + error.message);
+                console.error('Error:', error);
+            } finally {
+                btn.disabled = false;
+                icon.classList.remove('spinning');
+                btn.innerHTML = originalText;
+            }
+        }
+        
+        // Logs Functions
+        let logsData = [];
+        
+        async function loadLogs() {
+            const container = document.getElementById('logs-container');
+            container.innerHTML = '<div class="loading">Loading logs...</div>';
+            
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+                
+                if (data.success) {
+                    logsData = data.logs || [];
+                    renderLogs();
+                } else {
+                    container.innerHTML = '<div style="text-align: center; color: var(--danger-color);">Error loading logs</div>';
+                }
+            } catch (error) {
+                container.innerHTML = '<div style="text-align: center; color: var(--danger-color);">Error loading logs</div>';
+                console.error('Error loading logs:', error);
+            }
+        }
+        
+        function renderLogs() {
+            const container = document.getElementById('logs-container');
+            const searchTerm = document.getElementById('logs-search').value.toLowerCase();
+            const levelFilter = document.getElementById('logs-level-filter').value;
+            
+            const filteredLogs = logsData.filter(log => {
+                const matchesSearch = !searchTerm || log.message.toLowerCase().includes(searchTerm);
+                const matchesLevel = !levelFilter || log.level === levelFilter;
+                return matchesSearch && matchesLevel;
+            });
+            
+            if (filteredLogs.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--text-muted);">No logs found</div>';
+                return;
+            }
+            
+            const html = filteredLogs.map(log => {
+                const levelClass = log.level ? log.level.toLowerCase() : 'info';
+                return `
+                    <div class="log-entry ${levelClass}">
+                        <span class="log-timestamp">${log.timestamp ? new Date(log.timestamp).toLocaleString() : ''}</span>
+                        <span>${escapeHtml(log.message)}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = html;
+            // Auto-scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function filterLogs() {
+            renderLogs();
+        }
+        
+        function refreshLogs() {
+            loadLogs();
+        }
+        
+        async function clearLogs() {
+            if (!confirm('Are you sure you want to clear all logs?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/logs/clear', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    logsData = [];
+                    renderLogs();
+                } else {
+                    alert('Failed to clear logs: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error clearing logs: ' + error.message);
+                console.error('Error:', error);
+            }
+        }
+        
         // Initialize visibility on load
         window.addEventListener('load', function() {
             // Initialize theme
@@ -1988,6 +2439,9 @@ HTML_TEMPLATE = """
             const checkbox = document.getElementById('kb_single_mode');
             const event = new Event('change');
             checkbox.dispatchEvent(event);
+            
+            // Load status dashboard on initial page load
+            loadStatusDashboard();
         });
     </script>
 </body>
@@ -2000,7 +2454,7 @@ def index():
     config = get_config()
     message = request.args.get('message')
     info = request.args.get('info')
-    return render_template_string(HTML_TEMPLATE, config=config, message=message, info=info)
+    return render_template_string(HTML_TEMPLATE, config=config, message=message, info=info, version=VERSION)
 
 @app.route('/save', methods=['POST'])
 def save():
@@ -2565,6 +3019,219 @@ def update_sync_state_on_delete(file_id):
             json.dump(state, f, indent=2)
     except Exception as e:
         print(f"Error updating sync state on delete: {e}")
+
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    """API endpoint to get sync status dashboard data"""
+    try:
+        config = get_config()
+        state_file = config['files']['state_file']
+        
+        # Default stats
+        stats = {
+            'success': True,
+            'total_files': 0,
+            'synced_files': 0,
+            'failed_files': 0,
+            'pending_retries': 0,
+            'total_conversions': 0,
+            'total_kbs': 0,
+            'active_kbs': 0,
+            'kb_stats': [],
+            'source_stats': [],
+            'last_sync': None,
+            'next_sync': None
+        }
+        
+        # Load state file
+        if os.path.exists(state_file):
+            with open(state_file, 'r') as f:
+                state = json.load(f)
+            
+            files_dict = state.get('files', {})
+            stats['total_files'] = len(files_dict)
+            
+            # Count by status
+            kb_file_counts = {}
+            for path, info in files_dict.items():
+                status = info.get('status', 'unknown')
+                if status == 'uploaded':
+                    stats['synced_files'] += 1
+                elif status == 'failed':
+                    stats['failed_files'] += 1
+                    retry_count = info.get('retry_count', 0)
+                    max_retries = config['retry']['max_attempts']
+                    if retry_count < max_retries:
+                        stats['pending_retries'] += 1
+                
+                # Count conversions (files with .json, .yaml, .yml, .conf extensions that were uploaded)
+                if status == 'uploaded':
+                    ext = os.path.splitext(path)[1].lower()
+                    if ext in ['.json', '.yaml', '.yml', '.conf']:
+                        stats['total_conversions'] += 1
+                
+                # Count files per KB
+                kb_name = info.get('knowledge_base', '')
+                if kb_name:
+                    kb_file_counts[kb_name] = kb_file_counts.get(kb_name, 0) + 1
+                else:
+                    kb_file_counts['Unassigned'] = kb_file_counts.get('Unassigned', 0) + 1
+                
+                # Get last sync time (most recent last_attempt)
+                last_attempt = info.get('last_attempt')
+                if last_attempt:
+                    if not stats['last_sync'] or last_attempt > stats['last_sync']:
+                        stats['last_sync'] = last_attempt
+            
+            # KB stats
+            stats['total_kbs'] = len(state.get('knowledge_bases', {}))
+            stats['active_kbs'] = len([kb for kb in kb_file_counts.keys() if kb != 'Unassigned'])
+            stats['kb_stats'] = [{'name': kb, 'file_count': count} for kb, count in sorted(kb_file_counts.items(), key=lambda x: x[1], reverse=True)]
+        
+        # Source stats
+        sources = []
+        
+        # Local files source
+        files_dir = config['files']['directory']
+        if os.path.exists(files_dir):
+            sources.append({
+                'name': f'Local Files ({files_dir})',
+                'files': stats['synced_files'],
+                'conversions': stats['total_conversions'],
+                'errors': stats['failed_files']
+            })
+        
+        # SSH sources
+        if config['ssh']['enabled'] and config['ssh']['sources']:
+            for ssh_source in config['ssh']['sources']:
+                ssh_name = ssh_source.get('name', ssh_source.get('host', 'Unknown'))
+                sources.append({
+                    'name': f'SSH: {ssh_name}',
+                    'files': 0,  # Would need to track per-source
+                    'conversions': 0,
+                    'errors': 0
+                })
+        
+        stats['source_stats'] = sources
+        
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error getting status: {e}")
+        return jsonify({'success': False, 'error': 'Failed to load status'}), 500
+
+@app.route('/api/sync/force', methods=['POST'])
+def force_sync():
+    """API endpoint to trigger a manual sync"""
+    try:
+        import subprocess
+        import sys
+        
+        # Run sync.py as a subprocess
+        result = subprocess.run(
+            [sys.executable, '/app/sync.py'],
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minute timeout
+        )
+        
+        # Parse output for stats
+        output = result.stdout
+        uploaded = 0
+        skipped = 0
+        failed = 0
+        
+        # Look for the summary line: "Sync complete: X uploaded, Y skipped, Z failed..."
+        import re
+        match = re.search(r'Sync complete: (\d+) uploaded, (\d+) skipped, (\d+) failed', output)
+        if match:
+            uploaded = int(match.group(1))
+            skipped = int(match.group(2))
+            failed = int(match.group(3))
+        
+        return jsonify({
+            'success': result.returncode == 0,
+            'uploaded': uploaded,
+            'skipped': skipped,
+            'failed': failed,
+            'output': output if result.returncode != 0 else None
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Sync timed out'}), 500
+    except Exception as e:
+        print(f"Error forcing sync: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    """API endpoint to get sync logs"""
+    try:
+        logs = []
+        log_file = '/app/sync.log'
+        
+        # Check if log file exists
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+                # Parse log lines
+                for line in lines[-500:]:  # Last 500 lines
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Try to parse timestamp and level from log format: [YYYY-MM-DD HH:MM:SS] message
+                    import re
+                    match = re.match(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (.+)', line)
+                    if match:
+                        timestamp = match.group(1)
+                        message = match.group(2)
+                        
+                        # Determine log level
+                        level = 'INFO'
+                        if 'ERROR' in message or '✗' in message:
+                            level = 'ERROR'
+                        elif 'WARNING' in message or '⚠' in message:
+                            level = 'WARNING'
+                        
+                        logs.append({
+                            'timestamp': timestamp,
+                            'level': level,
+                            'message': message
+                        })
+                    else:
+                        # No timestamp, add as-is
+                        logs.append({
+                            'timestamp': None,
+                            'level': 'INFO',
+                            'message': line
+                        })
+        else:
+            # No log file, return empty
+            logs.append({
+                'timestamp': None,
+                'level': 'INFO',
+                'message': 'No logs available yet. Logs will appear after the first sync.'
+            })
+        
+        return jsonify({'success': True, 'logs': logs})
+    except Exception as e:
+        print(f"Error getting logs: {e}")
+        return jsonify({'success': False, 'error': 'Failed to load logs'}), 500
+
+@app.route('/api/logs/clear', methods=['POST'])
+def clear_logs():
+    """API endpoint to clear logs"""
+    try:
+        log_file = '/app/sync.log'
+        
+        if os.path.exists(log_file):
+            # Clear the log file
+            with open(log_file, 'w') as f:
+                f.write('')
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error clearing logs: {e}")
+        return jsonify({'success': False, 'error': 'Failed to clear logs'}), 500
 
 def main():
     """Run the web interface"""
