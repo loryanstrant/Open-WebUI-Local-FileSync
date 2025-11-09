@@ -496,13 +496,15 @@ def convert_conf_to_markdown(conf_content, filename):
 
 
 
-def add_file_metadata_header(filepath, source_info, original_path=None):
+def add_file_metadata_header(filepath, source_info, original_path=None, created_time=None, modified_time=None):
     """Add metadata header to file content
     
     Args:
         filepath: Path to the file to add metadata to
         source_info: Dict with source information (type, name, host)
-        original_path: Original path of the file (if different from current)
+        original_path: Original path of the file (if different from current) (if different from current)
+        created_time: Original creation timestamp (epoch seconds)
+        modified_time: Original modification timestamp (epoch seconds)
     
     Returns:
         Tuple of (success: bool, new_filepath: Path or None, is_temp: bool)
@@ -513,11 +515,17 @@ def add_file_metadata_header(filepath, source_info, original_path=None):
             original_content = f.read()
         
         # Get file stats
-        file_stat = filepath.stat()
+        # Use provided timestamps or get from file stats
         from datetime import datetime
-        created = datetime.fromtimestamp(file_stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
-        modified = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+        if created_time:
+            created = datetime.fromtimestamp(created_time).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            created = datetime.fromtimestamp(filepath.stat().st_ctime).strftime('%Y-%m-%d %H:%M:%S')
         
+        if modified_time:
+            modified = datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            modified = datetime.fromtimestamp(filepath.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
         # Build metadata header
         metadata_lines = [
             "<!-- File Metadata",
@@ -1436,6 +1444,23 @@ def sync_files():
         # Create normalized file_key
         # For SSH files: use ssh:<host>/<relative_path_from_temp_dir>
         # For local files: use local/<relative_path_from_FILES_DIR>
+        # Get original path and timestamps from SSH metadata or file
+        original_path = None
+        created_time = None
+        modified_time = None
+        
+        file_key_str = str(filepath.resolve())
+        if file_key_str in SSH_FILE_METADATA:
+            # Use SSH metadata for remote files
+            ssh_meta = SSH_FILE_METADATA[file_key_str]
+            original_path = ssh_meta['remote_path']
+            modified_time = ssh_meta['mtime']
+            # For SSH files, created time is same as modified (no ctime in SFTP)
+            created_time = ssh_meta['mtime']
+        elif source_info['type'] == 'local':
+            # For local files, use full resolved path
+            original_path = file_key_str
+        
         if source_info['type'] == 'ssh' and ssh_temp_parent:
             relative_path = filepath.relative_to(ssh_temp_parent)
             file_key = f"ssh:{source_info['host']}/{relative_path}"
@@ -1496,13 +1521,31 @@ def sync_files():
         # Add metadata header to file (creates temp file)
         if conversion_success:
             # Determine original path for metadata
-            if source_info['type'] == 'ssh' and ssh_temp_parent:
+            # Get original path and timestamps from SSH metadata or file
+            original_path = None
+            created_time = None
+            modified_time = None
+            
+            file_key_str = str(filepath.resolve())
+            if file_key_str in SSH_FILE_METADATA:
+                # Use SSH metadata for remote files
+                ssh_meta = SSH_FILE_METADATA[file_key_str]
+                original_path = ssh_meta['remote_path']
+                modified_time = ssh_meta['mtime']
+                # For SSH files, created time is same as modified (no ctime in SFTP)
+                created_time = ssh_meta['mtime']
+            elif source_info['type'] == 'local':
+                # For local files, use full resolved path
+                original_path = str(filepath.resolve())
+            elif source_info['type'] == 'ssh' and ssh_temp_parent:
+                # Fallback if SSH metadata not available
                 original_path = str(filepath.relative_to(ssh_temp_parent))
             else:
+                # Other sources - use relative to FILES_DIR
                 original_path = str(filepath.relative_to(FILES_DIR))
             
             metadata_success, metadata_filepath, metadata_is_temp = add_file_metadata_header(
-                upload_filepath, source_info, original_path
+                upload_filepath, source_info, original_path, created_time, modified_time
             )
             
             if metadata_success:
@@ -1539,6 +1582,7 @@ def sync_files():
                 'last_attempt': datetime.now().isoformat(),
                 'retry_count': file_state.get('retry_count', 0) + 1,
                 'knowledge_base': kb_name,
+                'knowledge_base_id': kb_id,  # Add KB ID for display
                 'error': 'Conversion failed',
                 'source_type': source_info['type'],
                 'source_name': source_info['name'],
