@@ -223,6 +223,79 @@ This tab provides direct access to files in your Open WebUI instance, allowing y
 
 **Note:** This feature requires a valid Open WebUI URL and API key to be configured in the Configuration tab.
 
+### Status Dashboard
+
+The "Status" tab (default landing page) provides a comprehensive overview of your file synchronization status and statistics.
+
+**Status Dashboard (Light Mode):**
+
+![Status Dashboard Light](https://github.com/user-attachments/assets/aeff465a-5036-41c2-8388-16be869a28d2)
+
+**Status Dashboard (Dark Mode):**
+
+![Status Dashboard Dark](https://github.com/user-attachments/assets/9c2ec609-14dd-4bb6-b173-865b0c6e27e9)
+
+**Features:**
+- **Key Metrics Cards:**
+  - Total Files (with synced count)
+  - Knowledge Bases (total and active)
+  - Failed Uploads (with pending retries)
+  - File Conversions (JSON/YAML to Markdown)
+- **Files per Knowledge Base**: Breakdown showing file distribution across KBs
+- **Sync Sources**: Display of all sync sources with file counts, conversions, and error tracking
+- **Last Sync Time**: Timestamp of the most recent sync operation
+- **Force Sync Now Button**: Manually trigger a sync operation without waiting for the schedule
+- **Refresh Button**: Update the statistics without reloading the page
+
+**How to use:**
+1. The Status tab is the default view when you open the web interface
+2. Review the key metrics at a glance
+3. Click "Force Sync Now" to trigger an immediate sync (shows results in a popup)
+4. Click "↻ Refresh" to update the statistics
+5. View detailed breakdowns of files per knowledge base and sync sources
+
+### Sync Logs Viewer
+
+The "Logs" tab provides real-time access to synchronization logs with powerful search and filtering capabilities.
+
+**Logs Viewer:**
+
+![Logs Tab](https://github.com/user-attachments/assets/c85cadfd-ea3a-4cc7-973b-54c899a9c5f1)
+
+**Features:**
+- **Real-time log viewing**: Display logs from `/app/sync.log`
+- **Search functionality**: Filter log entries by text
+- **Log level filtering**: Filter by All Levels, Errors, Warnings, or Info
+- **Color-coded entries**:
+  - 🔴 Red border for ERROR entries
+  - 🟠 Orange border for WARNING entries
+  - ⚪ Default styling for INFO entries
+- **Auto-scroll**: Automatically scrolls to the latest entries
+- **Clear Logs**: Remove all log entries
+- **Timestamp display**: Each entry shows when it occurred
+
+**How to use:**
+1. Click on the "Logs" tab
+2. View recent sync operations and any errors
+3. Use the search box to find specific log entries
+4. Select a log level from the dropdown to filter entries
+5. Click "Refresh" to reload the latest logs
+6. Click "Clear Logs" to remove all log entries (requires confirmation)
+
+### Version Information and UI Improvements
+
+**Version Display:**
+
+![Version 1.5.0](https://github.com/user-attachments/assets/bc5a4cff-e59b-480a-8b11-d7021f425cd7)
+
+The web interface now displays the version number (v1.5.0) prominently in the header next to the title, making it easy to identify which version you're running.
+
+**UI Improvements:**
+- **Corrected Heading**: Title now shows "Open WebUI FileSync" (without hyphen, "Configuration" removed)
+- **GitHub Link**: Added link to the repository in the top-right header with GitHub icon
+- **Improved Theme Toggle**: Now shows current mode ("Dark" when in dark mode, "Light" when in light mode) instead of the mode you'll switch to
+- **Clearer Tab Names**: "File Management" renamed to "Knowledge Base Files" for better clarity
+
 ## Configuration File
 
 The web interface saves configuration to `/app/config/filesync-config.json` inside the container. This file is persisted through the volume mount at `./config:/app/config`.
@@ -301,6 +374,12 @@ The web interface also provides REST API endpoints for programmatic configuratio
 - `GET /api/openwebui/files` - Get all files from Open WebUI with knowledge base associations
 - `POST /api/openwebui/files/delete` - Delete files from Open WebUI (requires JSON body with `file_ids` array)
 
+### Status and Monitoring
+- `GET /api/status` - Get sync status dashboard statistics
+- `POST /api/sync/force` - Trigger a manual sync operation
+- `GET /api/logs` - Get sync logs with filtering support
+- `POST /api/logs/clear` - Clear all log entries
+
 ### SSH Filesystem Browser
 - `POST /api/ssh/browse` - Browse remote SSH filesystem (requires SSH connection details and path)
 
@@ -341,6 +420,18 @@ curl http://localhost:8000/api/openwebui/files
 curl -X POST http://localhost:8000/api/openwebui/files/delete \
   -H "Content-Type: application/json" \
   -d '{"file_ids": ["file_id_1", "file_id_2"]}'
+
+# Get status dashboard statistics
+curl http://localhost:8000/api/status
+
+# Trigger manual sync
+curl -X POST http://localhost:8000/api/sync/force
+
+# Get sync logs
+curl http://localhost:8000/api/logs
+
+# Clear all logs
+curl -X POST http://localhost:8000/api/logs/clear
 ```
 
 ## Environment Variables (Web Interface)

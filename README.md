@@ -8,7 +8,19 @@ A Docker container that periodically synchronizes files from a local mount with 
 
 ![Web Interface](https://github.com/user-attachments/assets/16be0cc1-f778-4415-b52a-afa5adfa7c38)
 
+**Status Dashboard - Monitor your sync operations:**
+
+![Status Dashboard](https://github.com/user-attachments/assets/aeff465a-5036-41c2-8388-16be869a28d2)
+
+**Real-time Logs - Track sync activity:**
+
+![Logs Viewer](https://github.com/user-attachments/assets/c85cadfd-ea3a-4cc7-973b-54c899a9c5f1)
+
 ### Latest Updates
+- 📊 **Status Dashboard**: Comprehensive overview with key metrics, force sync button, and detailed statistics (v1.5.0)
+- 📝 **Logs Viewer**: Real-time log viewing with search and filtering by log level (v1.5.0)
+- 🏷️ **Version Display**: Shows version number (v1.5.0) in the header
+- 🎨 **UI Improvements**: Corrected heading, GitHub link, improved theme toggle showing current mode (v1.5.0)
 - 🔍 **Multi-Criteria Filtering**: Filter sync state by status AND knowledge base simultaneously
 - ⚡ **Shift-Select**: Select ranges of items with Shift+click for bulk operations
 - 📁 **File Management Tab**: Directly manage files in Open WebUI - view, filter, search, and delete files
@@ -33,14 +45,17 @@ Then access `http://localhost:8000` to configure all settings!
 
 ## Features
 
-- 🖥️ **NEW:** Web-based configuration interface - no more complex environment variables!
-- 🔍 **NEW:** Multi-criteria filtering - filter by status AND knowledge base simultaneously
-- ⚡ **NEW:** Shift-select support - select ranges of items for bulk operations
-- 📁 **NEW:** File Management tab - directly manage Open WebUI files with filtering and bulk operations
-- 🔄 **NEW:** Sync state integration - file deletions automatically reflected in sync state
-- 🌓 **NEW:** Light/Dark mode toggle for comfortable viewing
-- 📂 **NEW:** SSH filesystem browser with multiple file selection for easy file selection
-- 📊 **NEW:** Advanced sync state management with visual status indicators and filtering
+- 🖥️ **Web-based configuration interface** - no more complex environment variables!
+- 📊 **NEW v1.5:** Status Dashboard - comprehensive overview of sync operations with force sync button
+- 📝 **NEW v1.5:** Logs Viewer - real-time log viewing with search and filtering
+- 🏷️ **NEW v1.5:** Version tracking and display
+- 🔍 **Multi-criteria filtering** - filter by status AND knowledge base simultaneously
+- ⚡ **Shift-select support** - select ranges of items for bulk operations
+- 📁 **File Management tab** - directly manage Open WebUI files with filtering and bulk operations
+- 🔄 **Sync state integration** - file deletions automatically reflected in sync state
+- 🌓 **Light/Dark mode toggle** - improved to show current mode
+- 📂 **SSH filesystem browser** - with multiple file selection for easy file selection
+- 📊 **Advanced sync state management** - with visual status indicators and filtering
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support
