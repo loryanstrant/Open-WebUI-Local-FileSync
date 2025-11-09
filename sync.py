@@ -1205,6 +1205,7 @@ def sync_files():
     # Fetch files from SSH remote sources if configured
     ssh_sources = parse_ssh_remote_sources()
     ssh_temp_dirs = []  # Keep track of temp directories to clean up later
+    ssh_source_map = {}  # Map temp_dir to SSH source info for tracking
     
     if ssh_sources:
         log(f"Found {len(ssh_sources)} SSH remote source(s) configured")
@@ -1216,6 +1217,13 @@ def sync_files():
             # Create a temporary directory for this SSH source
             temp_dir = Path(tempfile.mkdtemp(prefix=f"ssh_{host}_", dir=FILES_DIR))
             ssh_temp_dirs.append(temp_dir)
+            
+            # Store SSH source info for this temp directory
+            ssh_source_map[temp_dir] = {
+                'host': host,
+                'name': ssh_source.get('name', host),
+                'source_type': 'ssh'
+            }
             
             # Fetch files from SSH
             success, downloaded_files, ssh_kb_name = fetch_files_from_ssh(ssh_source, temp_dir)
@@ -1274,7 +1282,34 @@ def sync_files():
     converted = 0
     
     for filepath in files:
-        file_key = str(filepath.relative_to(FILES_DIR))
+        # Determine if this is an SSH file and get source info
+        source_info = {'type': 'local', 'name': 'Local Files'}
+        ssh_temp_parent = None
+        
+        # Check if file is from an SSH source
+        for temp_dir, ssh_info in ssh_source_map.items():
+            try:
+                filepath.relative_to(temp_dir)
+                # File is from this SSH source
+                source_info = {
+                    'type': 'ssh',
+                    'name': ssh_info['name'],
+                    'host': ssh_info['host']
+                }
+                ssh_temp_parent = temp_dir
+                break
+            except ValueError:
+                # Not from this SSH source, continue checking
+                continue
+        
+        # Create normalized file_key
+        # For SSH files: use ssh:<host>/<relative_path_from_temp_dir>
+        # For local files: use local/<relative_path_from_FILES_DIR>
+        if source_info['type'] == 'ssh' and ssh_temp_parent:
+            relative_path = filepath.relative_to(ssh_temp_parent)
+            file_key = f"ssh:{source_info['host']}/{relative_path}"
+        else:
+            file_key = f"local/{filepath.relative_to(FILES_DIR)}"
         
         # Determine knowledge base and filters for this file
         kb_name, file_filters, kb_mapped_path = get_knowledge_base_for_file(filepath, kb_mapping, kb_filters)
@@ -1327,6 +1362,17 @@ def sync_files():
         # Convert JSON/YAML to Markdown if needed
         conversion_success, upload_filepath, is_temp = convert_file_to_markdown(filepath)
         
+        # Get file metadata
+        try:
+            file_stat = filepath.stat()
+            file_size = file_stat.st_size
+            file_created = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
+            file_modified = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+        except Exception:
+            file_size = 0
+            file_created = datetime.now().isoformat()
+            file_modified = datetime.now().isoformat()
+        
         if not conversion_success:
             log(f"✗ Failed to convert {filepath.name}, skipping")
             state['files'][file_key] = {
@@ -1335,7 +1381,13 @@ def sync_files():
                 'last_attempt': datetime.now().isoformat(),
                 'retry_count': file_state.get('retry_count', 0) + 1,
                 'knowledge_base': kb_name,
-                'error': 'Conversion failed'
+                'error': 'Conversion failed',
+                'source_type': source_info['type'],
+                'source_name': source_info['name'],
+                'file_size': file_size,
+                'created_at': file_created,
+                'modified_at': file_modified,
+                'filename': filepath.name
             }
             failed += 1
             continue
@@ -1397,7 +1449,13 @@ def sync_files():
                             'file_id': file_id,
                             'last_attempt': datetime.now().isoformat(),
                             'retry_count': 0,
-                            'knowledge_base': kb_name
+                            'knowledge_base': kb_name,
+                            'source_type': source_info['type'],
+                            'source_name': source_info['name'],
+                            'file_size': file_size,
+                            'created_at': file_created,
+                            'modified_at': file_modified,
+                            'filename': filepath.name
                         }
                         uploaded += 1
                     else:
@@ -1409,7 +1467,13 @@ def sync_files():
                             'last_attempt': datetime.now().isoformat(),
                             'retry_count': file_state.get('retry_count', 0) + 1,
                             'knowledge_base': kb_name,
-                            'error': 'Failed to add to knowledge base collection'
+                            'error': 'Failed to add to knowledge base collection',
+                            'source_type': source_info['type'],
+                            'source_name': source_info['name'],
+                            'file_size': file_size,
+                            'created_at': file_created,
+                            'modified_at': file_modified,
+                            'filename': filepath.name
                         }
                         failed += 1
                 else:
@@ -1421,7 +1485,13 @@ def sync_files():
                         'last_attempt': datetime.now().isoformat(),
                         'retry_count': file_state.get('retry_count', 0) + 1,
                         'knowledge_base': kb_name,
-                        'error': 'Processing failed'
+                        'error': 'Processing failed',
+                        'source_type': source_info['type'],
+                        'source_name': source_info['name'],
+                        'file_size': file_size,
+                        'created_at': file_created,
+                        'modified_at': file_modified,
+                        'filename': filepath.name
                     }
                     failed += 1
             else:
@@ -1431,7 +1501,13 @@ def sync_files():
                     'status': 'uploaded',
                     'last_attempt': datetime.now().isoformat(),
                     'retry_count': 0,
-                    'knowledge_base': kb_name
+                    'knowledge_base': kb_name,
+                    'source_type': source_info['type'],
+                    'source_name': source_info['name'],
+                    'file_size': file_size,
+                    'created_at': file_created,
+                    'modified_at': file_modified,
+                    'filename': filepath.name
                 }
                 uploaded += 1
         else:
@@ -1442,7 +1518,13 @@ def sync_files():
                 'last_attempt': datetime.now().isoformat(),
                 'retry_count': file_state.get('retry_count', 0) + 1,
                 'knowledge_base': kb_name,
-                'error': 'Upload failed'
+                'error': 'Upload failed',
+                'source_type': source_info['type'],
+                'source_name': source_info['name'],
+                'file_size': file_size,
+                'created_at': file_created,
+                'modified_at': file_modified,
+                'filename': filepath.name
             }
             failed += 1
     
