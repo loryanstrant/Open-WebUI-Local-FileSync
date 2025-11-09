@@ -464,6 +464,103 @@ def convert_conf_to_markdown(conf_content, filename):
     lines.append("```")
     return "\n".join(lines)
 
+
+
+def add_file_metadata_header(filepath, source_info, original_path=None):
+    """Add metadata header to file content
+    
+    Args:
+        filepath: Path to the file to add metadata to
+        source_info: Dict with source information (type, name, host)
+        original_path: Original path of the file (if different from current)
+    
+    Returns:
+        Tuple of (success: bool, new_filepath: Path or None, is_temp: bool)
+    """
+    try:
+        # Read original content
+        with open(filepath, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+        
+        # Get file stats
+        file_stat = filepath.stat()
+        from datetime import datetime
+        created = datetime.fromtimestamp(file_stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
+        modified = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Build metadata header
+        metadata_lines = [
+            "<!-- File Metadata",
+            f"Source: {source_info.get('name', 'Unknown')}",
+            f"Source Type: {source_info.get('type', 'unknown')}",
+        ]
+        
+        if source_info.get('type') == 'ssh':
+            metadata_lines.append(f"SSH Host: {source_info.get('host', 'unknown')}")
+        
+        if original_path:
+            metadata_lines.append(f"Original Path: {original_path}")
+        
+        metadata_lines.extend([
+            f"Original Filename: {filepath.name}",
+            f"Created: {created}",
+            f"Modified: {modified}",
+            f"Synced: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "-->",
+            ""
+        ])
+        
+        # Combine metadata and content
+        new_content = "\n".join(metadata_lines) + "\n" + original_content
+        
+        # Create temp file with metadata
+        import tempfile
+        temp_fd, temp_path = tempfile.mkstemp(suffix=filepath.suffix, prefix=f"{filepath.stem}_meta_")
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as temp_file:
+                temp_file.write(new_content)
+            log(f"  ✓ Added metadata header to {filepath.name}")
+            return True, Path(temp_path), True
+        except Exception as e:
+            log(f"  ✗ Error writing file with metadata: {e}")
+            os.close(temp_fd)
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            return False, None, False
+            
+    except Exception as e:
+        log(f"  ✗ Error adding metadata to {filepath.name}: {e}")
+        return False, None, False
+
+
+def generate_unique_filename(filepath, source_info):
+    """Generate a unique filename based on source information
+    
+    Args:
+        filepath: Original file path
+        source_info: Dict with source information (type, name, host)
+    
+    Returns:
+        String with unique filename
+    """
+    stem = filepath.stem
+    suffix = filepath.suffix
+    
+    # Create source identifier
+    if source_info.get('type') == 'ssh':
+        # Use host name (sanitize for filename)
+        host = source_info.get('host', 'unknown')
+        # Remove special characters and replace with underscores
+        host_clean = re.sub(r'[^a-zA-Z0-9-]', '_', host)
+        source_id = f"ssh_{host_clean}"
+    else:
+        source_id = "local"
+    
+    # Combine: originalname_source.ext
+    return f"{stem}_{source_id}{suffix}"
+
 def should_process_file(filepath, filters, mapped_path=None):
     """Check if a file should be processed based on include/exclude filters
     
@@ -921,13 +1018,14 @@ def create_or_get_knowledge_base(kb_name, state):
         log(f"Error creating/getting knowledge base {kb_name}: {e}")
         return None
 
-def upload_file_to_openwebui(filepath, file_hash, kb_id=None):
+def upload_file_to_openwebui(filepath, file_hash, kb_id=None, upload_filename=None):
     """Upload a file to Open WebUI Knowledge Base
     
     Args:
         filepath: Path to the file to upload
         file_hash: MD5 hash of the file
         kb_id: Optional knowledge base ID to associate file with (not used during upload)
+        upload_filename: Optional custom filename to use for upload (if different from filepath.name)
     
     Returns:
         Tuple of (success: bool, file_id: str or None)
@@ -938,10 +1036,13 @@ def upload_file_to_openwebui(filepath, file_hash, kb_id=None):
         'Authorization': f'Bearer {OPENWEBUI_API_KEY}'
     }
     
+    # Use custom filename if provided, otherwise use original
+    filename_to_use = upload_filename if upload_filename else filepath.name
+    
     try:
         with open(filepath, 'rb') as f:
             files = {
-                'file': (filepath.name, f, 'application/octet-stream')
+                'file': (filename_to_use, f, 'application/octet-stream')
             }
             
             # Note: knowledge_base_id is not passed during upload
@@ -951,13 +1052,13 @@ def upload_file_to_openwebui(filepath, file_hash, kb_id=None):
             if response.status_code in [200, 201]:
                 result = response.json()
                 file_id = result.get('id')
-                log(f"✓ Uploaded: {filepath.name}")
+                log(f"✓ Uploaded: {filename_to_use}")
                 return True, file_id
             else:
-                log(f"✗ Failed to upload {filepath.name}: {response.status_code} - {response.text}")
+                log(f"✗ Failed to upload {filename_to_use}: {response.status_code} - {response.text}")
                 return False, None
     except Exception as e:
-        log(f"✗ Error uploading {filepath.name}: {e}")
+        log(f"✗ Error uploading {filename_to_use}: {e}")
         return False, None
 
 def add_file_to_knowledge_base(kb_id, file_id):
@@ -1362,6 +1463,33 @@ def sync_files():
         # Convert JSON/YAML to Markdown if needed
         conversion_success, upload_filepath, is_temp = convert_file_to_markdown(filepath)
         
+        # Add metadata header to file (creates temp file)
+        if conversion_success:
+            # Determine original path for metadata
+            if source_info['type'] == 'ssh' and ssh_temp_parent:
+                original_path = str(filepath.relative_to(ssh_temp_parent))
+            else:
+                original_path = str(filepath.relative_to(FILES_DIR))
+            
+            metadata_success, metadata_filepath, metadata_is_temp = add_file_metadata_header(
+                upload_filepath, source_info, original_path
+            )
+            
+            if metadata_success:
+                # Clean up previous temp file if it was created during conversion
+                if is_temp:
+                    try:
+                        upload_filepath.unlink()
+                    except:
+                        pass
+                # Use the new file with metadata
+                upload_filepath = metadata_filepath
+                is_temp = metadata_is_temp
+            # If metadata addition fails, continue with the file without metadata
+        
+        # Generate unique filename based on source
+        upload_filename = generate_unique_filename(filepath, source_info)
+        
         # Get file metadata
         try:
             file_stat = filepath.stat()
@@ -1421,7 +1549,7 @@ def sync_files():
                 continue
         
         # Upload file (use converted file if available)
-        success, file_id = upload_file_to_openwebui(upload_filepath, file_hash, kb_id)
+        success, file_id = upload_file_to_openwebui(upload_filepath, file_hash, kb_id, upload_filename)
         
         # Clean up temp file after upload
         if is_temp:
