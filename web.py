@@ -9,7 +9,7 @@ from config import get_config, save_config_to_file, export_env_to_config_file, D
 from pathlib import Path
 
 # Version information
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 
 try:
     import paramiko

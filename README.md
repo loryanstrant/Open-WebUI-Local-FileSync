@@ -59,8 +59,8 @@ Then access `http://localhost:8000` to configure all settings!
 - 🔄 Automatic periodic synchronization of files to Open WebUI
 - 📅 Flexible scheduling: hourly, daily, or weekly
 - 🌍 Timezone support
-- 📁 Multiple file format support (markdown, text, PDF, Word docs, JSON, YAML, configuration files)
-- 🔄 Automatic JSON/YAML/CONF to Markdown conversion
+- 📁 Multiple file format support (markdown, text, PDF, Word docs, JSON, YAML, TOML, configuration files, and any text-based files)
+- 🔄 Automatic text file detection and conversion to Markdown
 - 🔍 Smart sync: only uploads changed files
 - 🎯 Include/exclude filtering for files and folders per source (volume mounts and SSH)
 - 📂 Support for exact file paths or directory filtering
@@ -199,18 +199,21 @@ The sync script implements robust error handling:
 - **Retry Delay**: Configurable delay (default 60 seconds) between retry attempts
 - **State Persistence**: Upload status is saved between sync runs to handle failures gracefully
 
-### Configuration File Conversion
+### Automatic Text File Detection and Conversion
 
-JSON, YAML, and CONF files are automatically converted to Markdown format before upload:
+The sync tool automatically detects text files and converts them to Markdown format before upload:
 
-- **Automatic Detection**: Files with `.json`, `.yaml`, `.yml`, or `.conf` extensions are automatically detected
-- **Markdown Conversion**: Content is converted to a readable Markdown format with proper formatting
-- **Structured Display**: JSON/YAML nested objects and arrays are displayed with proper indentation
-- **Code Block Format**: Configuration files (.conf) are wrapped in code blocks for syntax highlighting
-- **Temporary Files**: Converted files are created temporarily, uploaded, and then cleaned up
-- **No Original File Changes**: Original files remain unchanged on your filesystem
+- **Universal Text Detection**: Any text-based file (regardless of extension) is automatically detected and converted
+- **Structured Format Recognition**: JSON, YAML, TOML files are parsed and converted to structured markdown with proper formatting
+- **Configuration Files**: Files with .conf extension or configuration-like content are wrapped in code blocks
+- **Generic Text Files**: Plain text files, logs, scripts, and other text content are converted with appropriate formatting
+- **Markdown Passthrough**: Existing markdown files (.md, .markdown) are uploaded as-is without conversion
+- **Binary Files**: Non-text files (PDF, images, etc.) are uploaded without modification
+- **Smart Formatting**: Code-like content is automatically wrapped in code blocks for syntax highlighting
+- **Temporary Conversion**: Converted files are created temporarily and cleaned up after upload
+- **Original Files Preserved**: Your original files remain unchanged on your filesystem
 
-**Example JSON/YAML Conversion:**
+**Example Structured Format Conversion (JSON/YAML/TOML):**
 
 A JSON file like this:
 ```json
@@ -251,7 +254,20 @@ level = INFO
 \`\`\`
 ```
 
-This makes configuration files much more readable in the Open WebUI knowledge base.
+**Example Generic Text File Conversion:**
+
+A log file or script like `deployment.log` (with no specific extension) is automatically detected as text and converted:
+```markdown
+# deployment.log
+
+\`\`\`
+2024-01-15 10:30:00 Starting deployment
+2024-01-15 10:30:15 Pulling latest image
+2024-01-15 10:30:45 Deployment complete
+\`\`\`
+```
+
+This makes all text-based files readable and searchable in the Open WebUI knowledge base, regardless of their file extension.
 
 For detailed configuration options, see the [Configuration Guide](CONFIGURATION.md).
 

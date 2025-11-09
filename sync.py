@@ -20,6 +20,11 @@ except ImportError:
     yaml = None
 
 try:
+    import tomllib
+except ImportError:
+    tomllib = None
+
+try:
     import paramiko
 except ImportError:
     paramiko = None
@@ -53,7 +58,7 @@ else:
     OPENWEBUI_URL = os.getenv('OPENWEBUI_URL', 'http://localhost:8080')
     OPENWEBUI_API_KEY = os.getenv('OPENWEBUI_API_KEY', '')
     FILES_DIR = os.getenv('FILES_DIR', '/data')
-    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf').split(',')
+    ALLOWED_EXTENSIONS = os.getenv('ALLOWED_EXTENSIONS', '.md,.txt,.pdf,.doc,.docx,.json,.yaml,.yml,.conf,.toml').split(',')
     STATE_FILE = os.getenv('STATE_FILE', '/app/sync_state.json')
     KNOWLEDGE_BASE_MAPPING = os.getenv('KNOWLEDGE_BASE_MAPPING', '')
     KNOWLEDGE_BASE_NAME = os.getenv('KNOWLEDGE_BASE_NAME', '')
@@ -479,6 +484,112 @@ def convert_yaml_to_markdown(yaml_data, filename):
     # YAML and JSON have similar structures, reuse the JSON converter
     return convert_json_to_markdown(yaml_data, filename)
 
+def is_text_file(filepath):
+    """Detect if a file is a text file by attempting to read it as UTF-8
+    
+    Args:
+        filepath: Path to the file to check
+    
+    Returns:
+        True if file appears to be text, False otherwise
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            # Try to read first 8KB to detect if it's text
+            # This avoids loading huge files entirely
+            chunk = f.read(8192)
+            # Check for null bytes which indicate binary
+            if '\0' in chunk:
+                return False
+            return True
+    except (UnicodeDecodeError, IOError):
+        return False
+
+def detect_file_format(filepath, content):
+    """Detect the format of a text file based on content and extension
+    
+    Args:
+        filepath: Path to the file
+        content: File content as string
+    
+    Returns:
+        Format string: 'json', 'yaml', 'toml', 'conf', or 'text'
+    """
+    ext = filepath.suffix.lower()
+    
+    # Check extension first
+    if ext == '.json':
+        return 'json'
+    elif ext in ['.yaml', '.yml']:
+        return 'yaml'
+    elif ext == '.toml':
+        return 'toml'
+    elif ext == '.conf':
+        return 'conf'
+    
+    # Try to detect format from content if no recognized extension
+    # Try JSON
+    if content.strip().startswith(('{', '[')):
+        try:
+            json.loads(content)
+            return 'json'
+        except:
+            pass
+    
+    # Try TOML (usually starts with key = value or [section])
+    if tomllib and ('[' in content or '=' in content):
+        try:
+            tomllib.loads(content)
+            return 'toml'
+        except:
+            pass
+    
+    # Try YAML (can be tricky, look for common patterns)
+    if yaml and (':' in content and not content.strip().startswith('<')):
+        try:
+            data = yaml.safe_load(content)
+            if data is not None and not isinstance(data, str):
+                return 'yaml'
+        except:
+            pass
+    
+    # Default to generic text
+    return 'text'
+
+def convert_text_to_markdown(text_content, filename):
+    """Convert plain text file content to formatted Markdown
+    
+    Args:
+        text_content: Raw text file content as string
+        filename: Original filename for title
+    
+    Returns:
+        Markdown formatted string
+    """
+    # Detect if it looks like code or configuration
+    # Check for common code patterns
+    code_indicators = ['function ', 'class ', 'def ', 'import ', 'require', 'package ', '#!/', '<?php', '<html']
+    is_code = any(indicator in text_content for indicator in code_indicators)
+    
+    # Also check for high proportion of special characters (suggests code/config)
+    if not is_code and len(text_content) > 20:
+        special_chars = sum(1 for c in text_content if c in '{}[]();=<>|&')
+        is_code = special_chars / len(text_content) > 0.05
+    
+    lines = [f"# {filename}\n"]
+    
+    if is_code:
+        # Wrap in code block
+        lines.append("```")
+        lines.append(text_content)
+        lines.append("```")
+    else:
+        # Plain text - just add it with a separator
+        lines.append("")
+        lines.append(text_content)
+    
+    return "\n".join(lines)
+
 def convert_conf_to_markdown(conf_content, filename):
     """Convert configuration file content to formatted Markdown
     
@@ -493,6 +604,19 @@ def convert_conf_to_markdown(conf_content, filename):
     lines.append(conf_content)
     lines.append("```")
     return "\n".join(lines)
+
+def convert_toml_to_markdown(toml_data, filename):
+    """Convert TOML data to formatted Markdown
+    
+    Args:
+        toml_data: Parsed TOML object (dict)
+        filename: Original filename for title
+    
+    Returns:
+        Markdown formatted string
+    """
+    # TOML and JSON have similar structures (dicts), reuse the JSON converter
+    return convert_json_to_markdown(toml_data, filename)
 
 
 
@@ -666,7 +790,15 @@ def should_process_file(filepath, filters, mapped_path=None):
     return True
 
 def convert_file_to_markdown(filepath):
-    """Convert JSON/YAML/CONF files to Markdown format
+    """Convert text files to Markdown format
+    
+    Automatically detects and converts:
+    - JSON files to structured markdown
+    - YAML files to structured markdown  
+    - TOML files to structured markdown
+    - Configuration files to code blocks
+    - Other text files to markdown with appropriate formatting
+    - Markdown files are NOT converted (uploaded as-is)
     
     Args:
         filepath: Path to the file
@@ -679,43 +811,72 @@ def convert_file_to_markdown(filepath):
     """
     ext = filepath.suffix.lower()
     
-    # Only convert JSON, YAML, and CONF files
-    if ext not in ['.json', '.yaml', '.yml', '.conf']:
+    # Skip conversion for markdown files - upload as-is
+    if ext in ['.md', '.markdown']:
+        return True, filepath, False
+    
+    # Check if file is text
+    if not is_text_file(filepath):
+        # Not a text file, return as-is (e.g., PDF, images, etc.)
         return True, filepath, False
     
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Parse based on extension
-        if ext == '.json':
+        # Detect file format
+        file_format = detect_file_format(filepath, content)
+        
+        # Convert based on detected format
+        if file_format == 'json':
             try:
                 data = json.loads(content)
                 markdown_content = convert_json_to_markdown(data, filepath.name)
             except json.JSONDecodeError as e:
                 log(f"⚠ Failed to parse JSON file {filepath.name}: {e}")
-                return False, None, False
-        elif ext in ['.yaml', '.yml']:
+                # Fallback to plain text conversion
+                markdown_content = convert_text_to_markdown(content, filepath.name)
+        
+        elif file_format == 'yaml':
             if yaml is None:
-                log(f"⚠ PyYAML not installed, cannot convert {filepath.name}")
-                return True, filepath, False
-            try:
-                # Try to parse YAML with safe_load first
-                data = yaml.safe_load(content)
-                markdown_content = convert_yaml_to_markdown(data, filepath.name)
-            except yaml.YAMLError as e:
-                # If safe_load fails due to custom tags like !include, treat as plain text
-                error_msg = str(e)
-                if 'could not determine a constructor for the tag' in error_msg or '!include' in error_msg:
-                    log(f"⚠ YAML file {filepath.name} contains custom tags, converting as plain text")
-                    # Convert as plain text with code block formatting
-                    markdown_content = convert_conf_to_markdown(content, filepath.name)
-                else:
-                    log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
-                    return False, None, False
-        elif ext == '.conf':
-            # Convert .conf files as plain text with formatting
+                log(f"⚠ PyYAML not installed, converting {filepath.name} as plain text")
+                markdown_content = convert_text_to_markdown(content, filepath.name)
+            else:
+                try:
+                    # Try to parse YAML with safe_load first
+                    data = yaml.safe_load(content)
+                    markdown_content = convert_yaml_to_markdown(data, filepath.name)
+                except yaml.YAMLError as e:
+                    # If safe_load fails due to custom tags like !include, treat as plain text
+                    error_msg = str(e)
+                    if 'could not determine a constructor for the tag' in error_msg or '!include' in error_msg:
+                        log(f"⚠ YAML file {filepath.name} contains custom tags, converting as plain text")
+                        markdown_content = convert_conf_to_markdown(content, filepath.name)
+                    else:
+                        log(f"⚠ Failed to parse YAML file {filepath.name}: {e}")
+                        # Fallback to plain text
+                        markdown_content = convert_text_to_markdown(content, filepath.name)
+        
+        elif file_format == 'toml':
+            if tomllib is None:
+                log(f"⚠ tomllib not available, converting {filepath.name} as plain text")
+                markdown_content = convert_text_to_markdown(content, filepath.name)
+            else:
+                try:
+                    data = tomllib.loads(content)
+                    markdown_content = convert_toml_to_markdown(data, filepath.name)
+                except Exception as e:
+                    log(f"⚠ Failed to parse TOML file {filepath.name}: {e}")
+                    # Fallback to plain text conversion
+                    markdown_content = convert_text_to_markdown(content, filepath.name)
+        
+        elif file_format == 'conf':
+            # Convert .conf files as plain text with code block formatting
             markdown_content = convert_conf_to_markdown(content, filepath.name)
+        
+        else:  # file_format == 'text'
+            # Generic text file conversion
+            markdown_content = convert_text_to_markdown(content, filepath.name)
         
         # Create temporary markdown file
         temp_fd, temp_path = tempfile.mkstemp(suffix='.md', prefix=f"{filepath.stem}_")
