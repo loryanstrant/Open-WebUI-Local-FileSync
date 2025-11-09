@@ -65,6 +65,10 @@ else:
     SSH_KEY_PATH = os.getenv('SSH_KEY_PATH', '/app/ssh_keys')
     SSH_STRICT_HOST_KEY_CHECKING = os.getenv('SSH_STRICT_HOST_KEY_CHECKING', 'false').lower() == 'true'
 
+
+# Global dict to store SSH file metadata (local_path -> remote_info)
+SSH_FILE_METADATA = {}
+
 def log(message):
     """Log with timestamp"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -260,9 +264,10 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
                     downloaded = _download_ssh_file(sftp_client, remote_path, temp_dir, host)
                     if downloaded:
                         # Apply filters to downloaded file
-                        for file_path in downloaded:
+                        for file_info in downloaded:
+                            file_path = file_info['path']
                             if should_process_file(file_path, ssh_filters, temp_dir):
-                                downloaded_files.append(file_path)
+                                downloaded_files.append(file_info)
                             else:
                                 log(f"  ⊗ Filtered by SSH source rules: {file_path.name}")
                                 # Remove filtered file
@@ -275,9 +280,10 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
                     downloaded = _download_ssh_directory(sftp_client, remote_path, temp_dir, host)
                     if downloaded:
                         # Apply filters to downloaded files
-                        for file_path in downloaded:
+                        for file_info in downloaded:
+                            file_path = file_info['path']
                             if should_process_file(file_path, ssh_filters, temp_dir):
-                                downloaded_files.append(file_path)
+                                downloaded_files.append(file_info)
                             else:
                                 log(f"  ⊗ Filtered by SSH source rules: {file_path.name}")
                                 # Remove filtered file
@@ -292,6 +298,16 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
                 log(f"✗ Remote path not found: {remote_path}")
             except Exception as e:
                 log(f"✗ Error processing remote path {remote_path}: {e}")
+        
+        # Store metadata for SSH files in global dict
+        for file_info in downloaded_files:
+            local_path = str(file_info['path'].resolve())
+            SSH_FILE_METADATA[local_path] = {
+                'remote_path': file_info['remote_path'],
+                'mtime': file_info['mtime'],
+                'atime': file_info['atime'],
+                'host': host
+            }
         
         log(f"✓ Downloaded {len(downloaded_files)} files from {host}")
         return True, downloaded_files, kb_name
@@ -320,37 +336,51 @@ def fetch_files_from_ssh(ssh_source, temp_dir):
 
 def _download_ssh_file(sftp_client, remote_filepath, local_dir, host):
     """Download a single file from SSH server
-    
+
     Args:
         sftp_client: Active SFTP client
         remote_filepath: Path to remote file
         local_dir: Path object for local directory
         host: Hostname for logging
-    
+
     Returns:
-        List containing Path object of downloaded file, or empty list if failed
+        List containing dict with Path object and metadata, or empty list if failed
     """
     try:
         # Get file extension
         file_ext = os.path.splitext(remote_filepath)[1].lower()
-        
+
         # Check if extension is allowed
         if file_ext not in ALLOWED_EXTENSIONS:
             return []
+
+        # Get remote file stats BEFORE downloading to preserve timestamps
+        remote_stat = sftp_client.stat(remote_filepath)
         
         # Create local filename (preserve filename, create subdirs if needed)
         filename = os.path.basename(remote_filepath)
         local_filepath = local_dir / filename
-        
+
         # Ensure local directory exists
         local_filepath.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Download file
         sftp_client.get(remote_filepath, str(local_filepath))
-        log(f"  ↓ Downloaded: {filename}")
         
-        return [local_filepath]
-    
+        # Preserve timestamps from remote file
+        os.utime(str(local_filepath), (remote_stat.st_atime, remote_stat.st_mtime))
+        
+        log(f"  ↓ Downloaded: {filename}")
+
+        # Return file path with metadata
+        return [{
+            'path': local_filepath,
+            'remote_path': remote_filepath,
+            'size': remote_stat.st_size,
+            'mtime': remote_stat.st_mtime,
+            'atime': remote_stat.st_atime
+        }]
+
     except Exception as e:
         log(f"  ✗ Failed to download {remote_filepath}: {e}")
         return []
@@ -385,8 +415,8 @@ def _download_ssh_directory(sftp_client, remote_dirpath, local_dir, host, _depth
             
             if stat_module.S_ISREG(entry.st_mode):
                 # It's a file - download it
-                files = _download_ssh_file(sftp_client, remote_path, local_dir, host)
-                downloaded_files.extend(files)
+                file_infos = _download_ssh_file(sftp_client, remote_path, local_dir, host)
+                downloaded_files.extend(file_infos)
             elif stat_module.S_ISDIR(entry.st_mode):
                 # It's a subdirectory - recurse into it
                 subdir_files = _download_ssh_directory(sftp_client, remote_path, local_dir, host, _depth + 1)
