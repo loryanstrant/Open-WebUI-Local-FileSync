@@ -68,7 +68,16 @@ else:
 def log(message):
     """Log with timestamp"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[{timestamp}] {message}", flush=True)
+    log_message = f"[{timestamp}] {message}"
+    print(log_message, flush=True)
+    
+    # Also write to log file for web interface
+    try:
+        log_file = '/app/sync.log'
+        with open(log_file, 'a') as f:
+            f.write(log_message + '\n')
+    except Exception:
+        pass  # Don't fail if we can't write to log file
 
 def parse_ssh_remote_sources():
     """Parse SSH remote sources from environment variable
