@@ -9,7 +9,7 @@ from config import get_config, save_config_to_file, export_env_to_config_file, D
 from pathlib import Path
 
 # Version information
-VERSION = "1.0.0"
+VERSION = "1.5.0"
 
 try:
     import paramiko
@@ -3159,7 +3159,7 @@ def force_sync():
         return jsonify({'success': False, 'error': 'Sync timed out'}), 500
     except Exception as e:
         print(f"Error forcing sync: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to trigger sync'}), 500
 
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
