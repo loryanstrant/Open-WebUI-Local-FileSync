@@ -1,3 +1,5 @@
+**NOTE:** No longer required due to native functionality: https://github.com/open-webui/oikb
+
 # Open-WebUI-Local-FileSync
 
 A Docker container that periodically synchronizes files from a local mount with the Open WebUI knowledge base.
